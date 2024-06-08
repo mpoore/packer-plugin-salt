@@ -9,11 +9,8 @@ package salt
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
 	"github.com/hashicorp/hcl/v2/hcldec"
 	"github.com/hashicorp/packer-plugin-sdk/common"
@@ -41,7 +38,7 @@ type Config struct {
 
 type Provisioner struct {
 	config        Config
-	saltFiles     []string
+	stateFiles    []string
 	generatedData map[string]interface{}
 }
 
@@ -61,7 +58,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	}
 
 	// Reset the state.
-	p.saltFiles = make([]string, 0, len(p.config.StateFiles))
+	p.stateFiles = make([]string, 0, len(p.config.StateFiles))
 
 	// Defaults
 	if p.config.StagingDir == "" {
@@ -122,7 +119,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 }
 
 func (p *Provisioner) uploadStateFiles(ui packersdk.Ui, comm packersdk.Communicator) error {
-	for index, stateFile := range p.stateFiles {
+	for _, stateFile := range p.stateFiles {
 		if err := p.uploadStateFile(ui, comm, stateFile); err != nil {
 			return err
 		}
@@ -159,8 +156,9 @@ func (p *Provisioner) executeSalt(ui packersdk.Ui, comm packersdk.Communicator) 
 }
 
 func (p *Provisioner) executeSaltState(
-	ui packersdk.Ui, comm packersdk.Communicator, stateFile,
+	ui packersdk.Ui, comm packersdk.Communicator, stateFile string,
 ) error {
+	ctx := context.TODO()
 	env_vars := ""
 	exec_cmd := "salt-call --local state.apply"
 

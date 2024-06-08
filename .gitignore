@@ -1,0 +1,6 @@
+main
+dist/*
+docs-rendered/*
+packer-plugin-salt
+.docs
+crash.log

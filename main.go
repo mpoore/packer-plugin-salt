@@ -1,8 +1,12 @@
 // main.go
 
+package main
+
 import (
+	"fmt"
+	"os"
+
 	"github.com/hashicorp/packer-plugin-sdk/plugin"
-	"github.com/hashicorp/packer-plugin-ansible/version"
 
 	salt "github.com/mpoore/packer-plugin-salt/provisioner/salt"
 )

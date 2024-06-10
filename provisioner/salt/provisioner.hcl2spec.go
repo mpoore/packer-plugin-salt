@@ -22,6 +22,7 @@ type FlatConfig struct {
 	StagingDir            *string           `mapstructure:"staging_directory" cty:"staging_directory" hcl:"staging_directory"`
 	CleanStagingDir       *bool             `mapstructure:"clean_staging_directory" cty:"clean_staging_directory" hcl:"clean_staging_directory"`
 	UseSudo       		  *bool             `mapstructure:"use_sudo" cty:"use_sudo" hcl:"use_sudo"`
+	IsWindows     		  *bool             `mapstructure:"windows" cty:"windows" hcl:"windows"`
 }
 
 // FlatMapstructure returns a new FlatConfig.
@@ -48,6 +49,7 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"staging_directory":          &hcldec.AttrSpec{Name: "staging_directory", Type: cty.String, Required: false},
 		"clean_staging_directory":    &hcldec.AttrSpec{Name: "clean_staging_directory", Type: cty.Bool, Required: false},
 		"use_sudo":    				  &hcldec.AttrSpec{Name: "use_sudo", Type: cty.Bool, Required: false},
+		"windows":    				  &hcldec.AttrSpec{Name: "windows", Type: cty.Bool, Required: false},
 	}
 	return s
 }

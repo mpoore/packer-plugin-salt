@@ -20,11 +20,15 @@ import (
 	"github.com/hashicorp/packer-plugin-sdk/template/interpolate"
 )
 
-const DefaultStagingDir = "/tmp/packer-provisioner-salt"
+const DefaultStagingDirLin = "/tmp/packer-provisioner-salt"
+const DefaultStagingDirWin = "C:/Windows/Temp/packer-provisioner-salt"
 
 type Config struct {
 	common.PackerConfig `mapstructure:",squash"`
 	ctx                 interpolate.Context
+	// The type of OS that the workload is using. By setting this value to `true` then
+	// it is assumed that the target OS is Windows based. By default this setting is `false`.
+	IsWindows bool `mapstructure:"windows"`
 	// The state files to be applied by Salt. These files must exist on
 	// your local system where Packer is executing.
 	StateFiles []string `mapstructure:"state_files"`
@@ -35,7 +39,7 @@ type Config struct {
 	// applying Salt states. By default this is set to `false`.
 	CleanStagingDir bool `mapstructure:"clean_staging_directory"`
 	// If set to `true`, the command to execute Salt will be prefixed by `sudo`
-	// By default this is set to `false`.
+	// on Linux / Unix based systems. By default this is set to `false`.
 	UseSudo bool `mapstructure:"use_sudo"`
 }
 
@@ -65,7 +69,11 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 
 	// Defaults
 	if p.config.StagingDir == "" {
-		p.config.StagingDir = filepath.ToSlash(DefaultStagingDir)
+		if p.config.IsWindows {
+			p.config.StagingDir = filepath.ToSlash(DefaultStagingDirWin)
+		} else {
+			p.config.StagingDir = filepath.ToSlash(DefaultStagingDirLin)
+		}
 	}
 
 	// Validation
@@ -80,12 +88,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		if err := validateFileConfig(stateFile, "state_files", true); err != nil {
 			errs = packersdk.MultiErrorAppend(errs, err)
 		} else {
-			_, err := filepath.Abs(stateFile)
-			if err != nil {
-				errs = packersdk.MultiErrorAppend(errs, err)
-			} else {
-				p.stateFiles = append(p.stateFiles, stateFile)
-			}
+			p.stateFiles = append(p.stateFiles, stateFile)
 		}
 	}
 
@@ -163,23 +166,12 @@ func (p *Provisioner) executeSaltState(
 	ui packersdk.Ui, comm packersdk.Communicator, stateFile string,
 ) error {
 	ctx := context.TODO()
-	// env_vars := ""
-	// exec_cmd := "salt-call --local state.apply"
-	// exec_dir := filepath.ToSlash(filepath.Dir(stateFile))
-	// stateName := strings.ReplaceAll(filepath.Base(stateFile), ".sls", "")
 	stateName := strings.ReplaceAll(stateFile, ".sls", "")
 	exec_cmd := fmt.Sprintf("salt-call --local --file-root=%s state.apply %s", p.config.StagingDir, stateName)
-	if p.config.UseSudo {
+	if p.config.UseSudo && !p.config.IsWindows {
 		ui.Message("Using sudo to execute salt-call...")
 		exec_cmd = fmt.Sprintf("sudo %s", exec_cmd)
 	}
-	// command := fmt.Sprintf("cd %s && %s %s %s",
-	// exec_dir, env_vars, exec_cmd, stateName,
-	// )
-	// ui.Message(fmt.Sprintf("Executing Salt: %s", command))
-	// cmd := &packersdk.RemoteCmd{
-	// Command: command,
-	// }
 	ui.Message(fmt.Sprintf("Executing Salt: %s", exec_cmd))
 	cmd := &packersdk.RemoteCmd{
 		Command: exec_cmd,

@@ -17,7 +17,6 @@ import (
 	packersdk "github.com/hashicorp/packer-plugin-sdk/packer"
 	"github.com/hashicorp/packer-plugin-sdk/template/config"
 	"github.com/hashicorp/packer-plugin-sdk/template/interpolate"
-	"github.com/hashicorp/packer-plugin-sdk/uuid"
 )
 
 const DefaultStagingDir = "/tmp/packer-provisioner-salt"
@@ -65,7 +64,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 
 	// Defaults
 	if p.config.StagingDir == "" {
-		p.config.StagingDir = filepath.ToSlash(filepath.Join(DefaultStagingDir, uuid.TimeOrderedUUID()))
+		p.config.StagingDir = filepath.ToSlash(DefaultStagingDir)
 	}
 
 	// Validation
@@ -166,7 +165,7 @@ func (p *Provisioner) executeSaltState(
 	exec_cmd := "salt-call --local state.apply"
 	if p.config.UseSudo {
 		ui.Message("Using sudo to execute salt-call...")
-		exec_cmd := "sudo salt-call --local state.apply"
+		exec_cmd = "sudo salt-call --local state.apply"
 	}
 
 	command := fmt.Sprintf("cd %s && %s %s %s",

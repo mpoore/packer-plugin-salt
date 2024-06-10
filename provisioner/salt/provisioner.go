@@ -34,6 +34,9 @@ type Config struct {
 	// If set to `true`, the content of the `staging_directory` will be removed after
 	// applying Salt states. By default this is set to `false`.
 	CleanStagingDir bool `mapstructure:"clean_staging_directory"`
+	// If set to `true`, the command to execute Salt will be prefixed by `sudo`
+	// By default this is set to `false`.
+	UseSudo bool `mapstructure:"use_sudo"`
 }
 
 type Provisioner struct {
@@ -161,6 +164,10 @@ func (p *Provisioner) executeSaltState(
 	ctx := context.TODO()
 	env_vars := ""
 	exec_cmd := "salt-call --local state.apply"
+	if p.config.UseSudo {
+		ui.Message("Using sudo to execute salt-call...")
+		exec_cmd := "sudo salt-call --local state.apply"
+	}
 
 	command := fmt.Sprintf("cd %s && %s %s %s",
 		p.config.StagingDir, env_vars, exec_cmd, stateFile,

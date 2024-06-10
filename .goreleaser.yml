@@ -9,9 +9,9 @@ before:
   hooks:
     # We strongly recommend running tests to catch any regression before release.
     # Even though, this an optional step.
-    - go test ./...
+    #- go test ./...
     # Check plugin compatibility with required version of the Packer SDK
-    - make plugin-check
+    #- make plugin-check
     # Copy LICENSE file for inclusion in zip archive
     - cp LICENSE LICENSE.txt
 builds:

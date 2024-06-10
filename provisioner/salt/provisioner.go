@@ -165,7 +165,7 @@ func (p *Provisioner) executeSaltState(
 	ctx := context.TODO()
 	env_vars := ""
 	exec_cmd := "salt-call --local state.apply"
-	exec_dir := filepath.ToSlash(filepath.Join(p.config.StagingDir, filepath.Dir(stateFile)))
+	exec_dir := filepath.ToSlash(filepath.Dir(stateFile))
 	stateName := strings.ReplaceAll(filepath.Base(stateFile), ".sls", "")
 	if p.config.UseSudo {
 		ui.Message("Using sudo to execute salt-call...")

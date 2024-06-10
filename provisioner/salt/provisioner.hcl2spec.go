@@ -46,6 +46,7 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"state_files":                &hcldec.AttrSpec{Name: "state_files", Type: cty.List(cty.String), Required: false},
 		"staging_directory":          &hcldec.AttrSpec{Name: "staging_directory", Type: cty.String, Required: false},
 		"clean_staging_directory":    &hcldec.AttrSpec{Name: "clean_staging_directory", Type: cty.Bool, Required: false},
+		"use_sudo":    				  &hcldec.AttrSpec{Name: "use_sudo", Type: cty.Bool, Required: false},
 	}
 	return s
 }

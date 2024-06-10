@@ -231,8 +231,12 @@ func (p *Provisioner) uploadFile(ui packersdk.Ui, comm packersdk.Communicator, d
 
 func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, dir string) error {
 	ctx := context.TODO()
+	command := fmt.Sprintf("mkdir -p '%s'", dir)
+	if p.config.IsWindows {
+		command = fmt.Sprintf("mkdir '%s'", dir)
+	}
 	cmd := &packersdk.RemoteCmd{
-		Command: fmt.Sprintf("mkdir -p '%s'", dir),
+		Command: command,
 	}
 
 	ui.Message(fmt.Sprintf("Creating directory: %s", dir))

@@ -171,9 +171,8 @@ func (p *Provisioner) executeSaltState(
 	exec_cmd := fmt.Sprintf("salt-call --local --file-root=%s state.apply %s", p.config.StagingDir, stateName)
 	if p.config.UseSudo {
 		ui.Message("Using sudo to execute salt-call...")
-		exec_cmd = "sudo salt-call --local state.apply"
+		exec_cmd = fmt.Sprintf("sudo %s", exec_cmd)
 	}
-
 	// command := fmt.Sprintf("cd %s && %s %s %s",
 	// exec_dir, env_vars, exec_cmd, stateName,
 	// )

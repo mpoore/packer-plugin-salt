@@ -151,7 +151,7 @@ func (p *Provisioner) uploadStateFile(ui packersdk.Ui, comm packersdk.Communicat
 func (p *Provisioner) executeSalt(ui packersdk.Ui, comm packersdk.Communicator) error {
 	// Fetch external dependencies
 	for _, stateFile := range p.stateFiles {
-		stateFile = filepath.ToSlash(filepath.Join(p.config.StagingDir, stateFile))
+		//stateFile = filepath.ToSlash(filepath.Join(p.config.StagingDir, stateFile))
 		if err := p.executeSaltState(ui, comm, stateFile); err != nil {
 			return err
 		}
@@ -163,21 +163,27 @@ func (p *Provisioner) executeSaltState(
 	ui packersdk.Ui, comm packersdk.Communicator, stateFile string,
 ) error {
 	ctx := context.TODO()
-	env_vars := ""
-	exec_cmd := "salt-call --local state.apply"
-	exec_dir := filepath.ToSlash(filepath.Dir(stateFile))
-	stateName := strings.ReplaceAll(filepath.Base(stateFile), ".sls", "")
+	// env_vars := ""
+	// exec_cmd := "salt-call --local state.apply"
+	// exec_dir := filepath.ToSlash(filepath.Dir(stateFile))
+	// stateName := strings.ReplaceAll(filepath.Base(stateFile), ".sls", "")
+	stateName := strings.ReplaceAll(stateFile, ".sls", "")
+	exec_cmd := fmt.Sprintf("salt-call --local --file-root=%s state.apply %s", p.config.StagingDir, stateName)
 	if p.config.UseSudo {
 		ui.Message("Using sudo to execute salt-call...")
 		exec_cmd = "sudo salt-call --local state.apply"
 	}
 
-	command := fmt.Sprintf("cd %s && %s %s %s",
-		exec_dir, env_vars, exec_cmd, stateName,
-	)
-	ui.Message(fmt.Sprintf("Executing Salt: %s", command))
+	// command := fmt.Sprintf("cd %s && %s %s %s",
+	// exec_dir, env_vars, exec_cmd, stateName,
+	// )
+	// ui.Message(fmt.Sprintf("Executing Salt: %s", command))
+	// cmd := &packersdk.RemoteCmd{
+	// Command: command,
+	// }
+	ui.Message(fmt.Sprintf("Executing Salt: %s", exec_cmd))
 	cmd := &packersdk.RemoteCmd{
-		Command: command,
+		Command: exec_cmd,
 	}
 	if err := cmd.RunWithUi(ctx, comm, ui); err != nil {
 		return err

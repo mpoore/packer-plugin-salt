@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2/hcldec"
 	"github.com/hashicorp/packer-plugin-sdk/common"
@@ -79,7 +80,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		if err := validateFileConfig(stateFile, "state_files", true); err != nil {
 			errs = packersdk.MultiErrorAppend(errs, err)
 		} else {
-			stateFile, err := filepath.Abs(stateFile)
+			_, err := filepath.Abs(stateFile)
 			if err != nil {
 				errs = packersdk.MultiErrorAppend(errs, err)
 			} else {
@@ -130,7 +131,8 @@ func (p *Provisioner) uploadStateFiles(ui packersdk.Ui, comm packersdk.Communica
 }
 
 func (p *Provisioner) uploadStateFile(ui packersdk.Ui, comm packersdk.Communicator, stateFile string) error {
-	ui.Message(fmt.Sprintf("Uploading state file: %s", stateFile))
+	localStateFile, _ := filepath.Abs(stateFile)
+	ui.Message(fmt.Sprintf("Uploading state file: %s", localStateFile))
 
 	remoteDir := filepath.ToSlash(filepath.Join(p.config.StagingDir, filepath.Dir(stateFile)))
 	remoteStateFile := filepath.ToSlash(filepath.Join(p.config.StagingDir, stateFile))
@@ -163,13 +165,15 @@ func (p *Provisioner) executeSaltState(
 	ctx := context.TODO()
 	env_vars := ""
 	exec_cmd := "salt-call --local state.apply"
+	exec_dir := filepath.ToSlash(filepath.Join(p.config.StagingDir, filepath.Dir(stateFile)))
+	stateName := strings.ReplaceAll(filepath.Base(stateFile), ".sls", "")
 	if p.config.UseSudo {
 		ui.Message("Using sudo to execute salt-call...")
 		exec_cmd = "sudo salt-call --local state.apply"
 	}
 
 	command := fmt.Sprintf("cd %s && %s %s %s",
-		p.config.StagingDir, env_vars, exec_cmd, stateFile,
+		exec_dir, env_vars, exec_cmd, stateName,
 	)
 	ui.Message(fmt.Sprintf("Executing Salt: %s", command))
 	cmd := &packersdk.RemoteCmd{

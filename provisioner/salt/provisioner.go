@@ -138,11 +138,11 @@ func (p *Provisioner) uploadStateFile(ui packersdk.Ui, comm packersdk.Communicat
 	remoteStateFile := filepath.ToSlash(filepath.Join(p.config.StagingDir, stateFile))
 
 	if err := p.createDir(ui, comm, remoteDir); err != nil {
-		return fmt.Errorf("Error uploading state file: %s [%s]", stateFile, err)
+		return fmt.Errorf("Error uploading state file: %s [%s]", localStateFile, err)
 	}
 
-	if err := p.uploadFile(ui, comm, remoteStateFile, stateFile); err != nil {
-		return fmt.Errorf("Error uploading state file: %s [%s]", stateFile, err)
+	if err := p.uploadFile(ui, comm, remoteStateFile, localStateFile); err != nil {
+		return fmt.Errorf("Error uploading state file: %s [%s]", localStateFile, err)
 	}
 
 	return nil

@@ -21,6 +21,7 @@ type FlatConfig struct {
 	StateFiles    		  []string          `mapstructure:"state_files" cty:"state_files" hcl:"state_files"`
 	StagingDir            *string           `mapstructure:"staging_directory" cty:"staging_directory" hcl:"staging_directory"`
 	CleanStagingDir       *bool             `mapstructure:"clean_staging_directory" cty:"clean_staging_directory" hcl:"clean_staging_directory"`
+	UseSudo       		  *bool             `mapstructure:"use_sudo" cty:"use_sudo" hcl:"use_sudo"`
 }
 
 // FlatMapstructure returns a new FlatConfig.

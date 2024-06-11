@@ -20,16 +20,20 @@ import (
 	"github.com/hashicorp/packer-plugin-sdk/template/interpolate"
 )
 
-var saltProvisionerMap = map[string]string{
+var saltConfigMap = map[string]string{
 	"configStagingDirL": "/tmp/packer-provisioner-salt",
 	"configStagingDirW": "C:/Windows/Temp/packer-provisioner-salt",
-	"cmdTemplateW":      "PowerShell -ExecutionPolicy Bypass -OutputFormat Text -Command {%s}",
-	"cmdCreateDirL":     "mkdir -p '%s'",
-	"cmdCreateDirW":     "PS: New-Item -ItemType Directory -Path %s -Force",
-	"cmdDeleteDirL":     "rm -rf '%s'",
-	"cmdDeleteDirW":     "PS: Remove-Item -Recurse -Force %s",
-	"cmdSaltCallL":      "salt-call --local --file-root=%s state.apply %s",
-	"cmdSaltCallW":      "salt-call --local --file-root=%s state.apply %s",
+}
+
+var saltCommandMap = map[string]string{
+	"cmdTemplateL":  "sudo %s",
+	"cmdTemplateW":  "PowerShell -ExecutionPolicy Bypass -OutputFormat Text -Command {%s}",
+	"cmdCreateDirL": "mkdir -p '%s'",
+	"cmdCreateDirW": "PS: New-Item -ItemType Directory -Path %s -Force",
+	"cmdDeleteDirL": "rm -rf '%s'",
+	"cmdDeleteDirW": "PS: Remove-Item -Recurse -Force %s",
+	"cmdSaltCallL":  "salt-call --local --file-root=%s state.apply %s",
+	"cmdSaltCallW":  "salt-call --local --file-root=%s state.apply %s",
 }
 
 type Config struct {
@@ -78,7 +82,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 
 	// Defaults
 	if p.config.StagingDir == "" {
-		p.config.StagingDir = p.getMapValue(ui, "configStagingDir")
+		p.config.StagingDir = p.getConfig("configStagingDir")
 	}
 
 	// Validation
@@ -171,7 +175,7 @@ func (p *Provisioner) executeSaltState(
 ) error {
 	ctx := context.TODO()
 	stateName := strings.ReplaceAll(stateFile, ".sls", "")
-	command := p.getMapValue(ui, "cmdSaltCall")
+	command := p.getCommand(ui, "cmdSaltCall")
 	command = fmt.Sprintf(command, p.config.StagingDir, stateName)
 	ui.Message(fmt.Sprintf("Executing Salt: %s", command))
 	cmd := &packersdk.RemoteCmd{
@@ -232,7 +236,7 @@ func (p *Provisioner) uploadFile(ui packersdk.Ui, comm packersdk.Communicator, d
 
 func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, dir string) error {
 	ctx := context.TODO()
-	command := p.getMapValue(ui, "cmdCreateDir")
+	command := p.getCommand(ui, "cmdCreateDir")
 	cmd := &packersdk.RemoteCmd{
 		Command: fmt.Sprintf(command, dir),
 	}
@@ -250,7 +254,7 @@ func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, di
 
 func (p *Provisioner) removeDir(ui packersdk.Ui, comm packersdk.Communicator, dir string) error {
 	ctx := context.TODO()
-	command := p.getMapValue(ui, "cmdDeleteDir")
+	command := p.getCommand(ui, "cmdDeleteDir")
 	cmd := &packersdk.RemoteCmd{
 		Command: fmt.Sprintf(command, dir),
 	}
@@ -279,7 +283,7 @@ func (p *Provisioner) uploadDir(ui packersdk.Ui, comm packersdk.Communicator, ds
 	return comm.UploadDir(dst, src, nil)
 }
 
-func (p *Provisioner) getMapValue(ui packersdk.Ui, valueName string) string {
+func (p *Provisioner) getCommand(ui packersdk.Ui, valueName string) string {
 
 	if p.config.IsWindows {
 		valueName = valueName + "W"
@@ -288,19 +292,33 @@ func (p *Provisioner) getMapValue(ui packersdk.Ui, valueName string) string {
 	}
 	ui.Message(fmt.Sprintf("valueName: %s", valueName))
 
-	value := saltProvisionerMap[valueName]
+	value := saltCommandMap[valueName]
 	ui.Message(fmt.Sprintf("value: %s", value))
 
 	if p.config.IsWindows && value[0:2] == "PS:" {
 		value = value[4 : len(value)-1]
-		template := saltProvisionerMap["cmdTemplateW"]
-		value = fmt.Sprintf(template, value)
+		templateW := saltCommandMap["cmdTemplateW"]
+		value = fmt.Sprintf(templateW, value)
 	}
 
-	if p.config.UseSudo && valueName[0:2] == "cmd" {
-		value = fmt.Sprintf("sudo %s", value)
+	if !p.config.IsWindows {
+		templateL := saltCommandMap["cmdTemplateW"]
+		value = fmt.Sprintf(templateL, value)
 	}
 
 	ui.Message(fmt.Sprintf("value: %s", value))
+	return value
+}
+
+func (p *Provisioner) getConfig(valueName string) string {
+
+	if p.config.IsWindows {
+		valueName = valueName + "W"
+	} else {
+		valueName = valueName + "L"
+	}
+
+	value := saltConfigMap[valueName]
+
 	return value
 }

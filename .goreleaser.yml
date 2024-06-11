@@ -16,24 +16,24 @@ before:
     - cp LICENSE LICENSE.txt
 builds:
   # A separated build to run the packer-plugins-check only once for a linux_amd64 binary
-  -
-    id: linux-builds
-    mod_timestamp: '{{ .CommitTimestamp }}'
-    flags:
-      - -trimpath #removes all file system paths from the compiled executable
-    ldflags:
-      - '-s -w -X {{ .ModulePath }}/version.Version={{.Version}} -X {{ .ModulePath }}/version.VersionPrerelease= '
-    goos:
-      - linux
-    goarch:
-      - amd64
-      - '386'
-      - arm
-      - arm64
-    ignore:
-      - goos: linux
-        goarch: amd64
-    binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
+  #-
+  #  id: linux-builds
+  #  mod_timestamp: '{{ .CommitTimestamp }}'
+  #  flags:
+  #    - -trimpath #removes all file system paths from the compiled executable
+  #  ldflags:
+  #    - '-s -w -X {{ .ModulePath }}/version.Version={{.Version}} -X {{ .ModulePath }}/version.VersionPrerelease= '
+  #  goos:
+  #    - linux
+  #  goarch:
+  #    - amd64
+  #    - '386'
+  #    - arm
+  #    - arm64
+  #  ignore:
+  #    - goos: linux
+  #      goarch: amd64
+  #  binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
   -
     id: darwin-builds
     mod_timestamp: '{{ .CommitTimestamp }}'
@@ -47,36 +47,36 @@ builds:
       - amd64
       - arm64
     binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
-  -
-    id: other-builds
-    mod_timestamp: '{{ .CommitTimestamp }}'
-    flags:
-      - -trimpath #removes all file system paths from the compiled executable
-    ldflags:
-      - '-s -w -X {{ .ModulePath }}/version.Version={{.Version}} -X {{ .ModulePath }}/version.VersionPrerelease= '
-    goos:
-      - netbsd
-      - openbsd
-      - freebsd
-      - windows
-      - illumos
-      - solaris
-    goarch:
-      - amd64
-      - '386'
-      - arm
-    ignore:
-      - goos: windows
-        goarch: arm
-      - goos: illumos
-        goarch: arm
-      - goos: illumos
-        goarch: '386'
-      - goos: solaris
-        goarch: arm
-      - goos: solaris
-        goarch: '386'
-    binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
+  #-
+  #  id: other-builds
+  #  mod_timestamp: '{{ .CommitTimestamp }}'
+  #  flags:
+  #    - -trimpath #removes all file system paths from the compiled executable
+  #  ldflags:
+  #    - '-s -w -X {{ .ModulePath }}/version.Version={{.Version}} -X {{ .ModulePath }}/version.VersionPrerelease= '
+  #  goos:
+  #    - netbsd
+  #    - openbsd
+  #    - freebsd
+  #    - windows
+  #    - illumos
+  #    - solaris
+  #  goarch:
+  #    - amd64
+  #    - '386'
+  #    - arm
+  #  ignore:
+  #    - goos: windows
+  #      goarch: arm
+  #    - goos: illumos
+  #      goarch: arm
+  #    - goos: illumos
+  #      goarch: '386'
+  #    - goos: solaris
+  #      goarch: arm
+  #    - goos: solaris
+  #      goarch: '386'
+  #  binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
 archives:
 - format: zip
   files:

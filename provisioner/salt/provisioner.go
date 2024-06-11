@@ -302,7 +302,7 @@ func (p *Provisioner) getCommand(ui packersdk.Ui, valueName string) string {
 	}
 
 	if !p.config.IsWindows {
-		templateL := saltCommandMap["cmdTemplateW"]
+		templateL := saltCommandMap["cmdTemplateL"]
 		value = fmt.Sprintf(templateL, value)
 	}
 

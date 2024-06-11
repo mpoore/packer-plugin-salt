@@ -295,7 +295,7 @@ func (p *Provisioner) getMapValue(valueName string) string {
 		value = fmt.Sprintf(template, value)
 	}
 
-	if !p.config.IsWindows && p.config.UseSudo && valueName[0:2] != "cmd" {
+	if !p.config.IsWindows && p.config.UseSudo && valueName[0:2] == "cmd" {
 		value = fmt.Sprintf("sudo %s", value)
 	}
 

@@ -233,7 +233,7 @@ func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, di
 	ctx := context.TODO()
 	command := fmt.Sprintf("mkdir -p '%s'", dir)
 	if p.config.IsWindows {
-		command = fmt.Sprintf("New-Item -ItemType Directory -Path %s -Force", dir)
+		command = fmt.Sprintf("PowerShell -ExecutionPolicy Bypass -OutputFormat Text -Command 'New-Item -ItemType Directory -Path %s -Force'", dir)
 	}
 	cmd := &packersdk.RemoteCmd{
 		Command: command,

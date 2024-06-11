@@ -20,8 +20,17 @@ import (
 	"github.com/hashicorp/packer-plugin-sdk/template/interpolate"
 )
 
-const DefaultStagingDirLin = "/tmp/packer-provisioner-salt"
-const DefaultStagingDirWin = "C:/Windows/Temp/packer-provisioner-salt"
+var saltProvisionerMap = map[string]string{
+	"defaultStagingDirL": "/tmp/packer-provisioner-salt",
+	"defaultStagingDirW": "C:/Windows/Temp/packer-provisioner-salt",
+	"cmdTemplateW":       "PowerShell -ExecutionPolicy Bypass -OutputFormat Text -Command {%s}",
+	"cmdCreateDirL":      "mkdir -p '%s'",
+	"cmdCreateDirW":      "PS: New-Item -ItemType Directory -Path %s -Force",
+	"cmdDeleteDirL":      "rm -rf '%s'",
+	"cmdDeleteDirW":      "PS: Remove-Item -Recurse -Force %s",
+	"cmdSaltCallL":       "salt-call --local --file-root=%s state.apply %s",
+	"cmdSaltCallW":       "salt-call --local --file-root=%s state.apply %s",
+}
 
 type Config struct {
 	common.PackerConfig `mapstructure:",squash"`
@@ -69,11 +78,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 
 	// Defaults
 	if p.config.StagingDir == "" {
-		if p.config.IsWindows {
-			p.config.StagingDir = filepath.ToSlash(DefaultStagingDirWin)
-		} else {
-			p.config.StagingDir = filepath.ToSlash(DefaultStagingDirLin)
-		}
+		p.config.StagingDir = p.getMapValue("defaultStagingDir")
 	}
 
 	// Validation
@@ -154,7 +159,6 @@ func (p *Provisioner) uploadStateFile(ui packersdk.Ui, comm packersdk.Communicat
 func (p *Provisioner) executeSalt(ui packersdk.Ui, comm packersdk.Communicator) error {
 	// Fetch external dependencies
 	for _, stateFile := range p.stateFiles {
-		//stateFile = filepath.ToSlash(filepath.Join(p.config.StagingDir, stateFile))
 		if err := p.executeSaltState(ui, comm, stateFile); err != nil {
 			return err
 		}
@@ -167,14 +171,11 @@ func (p *Provisioner) executeSaltState(
 ) error {
 	ctx := context.TODO()
 	stateName := strings.ReplaceAll(stateFile, ".sls", "")
-	exec_cmd := fmt.Sprintf("salt-call --local --file-root=%s state.apply %s", p.config.StagingDir, stateName)
-	if p.config.UseSudo && !p.config.IsWindows {
-		ui.Message("Using sudo to execute salt-call...")
-		exec_cmd = fmt.Sprintf("sudo %s", exec_cmd)
-	}
-	ui.Message(fmt.Sprintf("Executing Salt: %s", exec_cmd))
+	command := p.getMapValue("cmdSaltCall")
+	command = fmt.Sprintf(command, p.config.StagingDir, stateName)
+	ui.Message(fmt.Sprintf("Executing Salt: %s", command))
 	cmd := &packersdk.RemoteCmd{
-		Command: exec_cmd,
+		Command: command,
 	}
 	if err := cmd.RunWithUi(ctx, comm, ui); err != nil {
 		return err
@@ -183,7 +184,7 @@ func (p *Provisioner) executeSaltState(
 		if cmd.ExitStatus() == 127 {
 			return fmt.Errorf("%s could not be found. Verify that it is available on the\n"+
 				"PATH after connecting to the machine.",
-				exec_cmd)
+				command)
 		}
 
 		return fmt.Errorf("Non-zero exit status: %d", cmd.ExitStatus())
@@ -231,12 +232,9 @@ func (p *Provisioner) uploadFile(ui packersdk.Ui, comm packersdk.Communicator, d
 
 func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, dir string) error {
 	ctx := context.TODO()
-	command := fmt.Sprintf("mkdir -p '%s'", dir)
-	if p.config.IsWindows {
-		command = fmt.Sprintf("PowerShell -ExecutionPolicy Bypass -OutputFormat Text -Command 'New-Item -ItemType Directory -Path %s -Force'", dir)
-	}
+	command := p.getMapValue("cmdCreateDir")
 	cmd := &packersdk.RemoteCmd{
-		Command: command,
+		Command: fmt.Sprintf(command, dir),
 	}
 
 	ui.Message(fmt.Sprintf("Creating directory: %s", dir))
@@ -252,8 +250,9 @@ func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, di
 
 func (p *Provisioner) removeDir(ui packersdk.Ui, comm packersdk.Communicator, dir string) error {
 	ctx := context.TODO()
+	command := p.getMapValue("cmdDeleteDir")
 	cmd := &packersdk.RemoteCmd{
-		Command: fmt.Sprintf("rm -rf '%s'", dir),
+		Command: fmt.Sprintf(command, dir),
 	}
 
 	ui.Message(fmt.Sprintf("Removing directory: %s", dir))
@@ -278,4 +277,27 @@ func (p *Provisioner) uploadDir(ui packersdk.Ui, comm packersdk.Communicator, ds
 		src = src + "/"
 	}
 	return comm.UploadDir(dst, src, nil)
+}
+
+func (p *Provisioner) getMapValue(valueName string) string {
+
+	if p.config.IsWindows {
+		valueName = valueName + "W"
+	} else {
+		valueName = valueName + "L"
+	}
+
+	value := saltProvisionerMap[valueName]
+
+	if p.config.IsWindows && value[0:2] == "PS:" {
+		value = value[4 : len(value)-1]
+		template := saltProvisionerMap["cmdTemplateW"]
+		value = fmt.Sprintf(template, value)
+	}
+
+	if !p.config.IsWindows && p.config.UseSudo {
+		value = fmt.Sprintf("sudo %s", value)
+	}
+
+	return value
 }

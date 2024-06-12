@@ -174,20 +174,6 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 		return err
 	}
 
-	if len(p.config.PlaybookPaths) > 0 {
-		ui.Message("Uploading additional Playbooks...")
-		playbookDir := filepath.ToSlash(filepath.Join(p.config.StagingDir, "playbooks"))
-		if err := p.createDir(ui, comm, playbookDir); err != nil {
-			return fmt.Errorf("Error creating playbooks directory: %s", err)
-		}
-		for _, src := range p.config.PlaybookPaths {
-			dst := filepath.ToSlash(filepath.Join(playbookDir, filepath.Base(src)))
-			if err := p.uploadDir(ui, comm, dst, src); err != nil {
-				return fmt.Errorf("Error uploading playbooks: %s", err)
-			}
-		}
-	}
-
 	if err := p.executeSalt(ui, comm); err != nil {
 		return fmt.Errorf("Error executing Salt: %s", err)
 	}

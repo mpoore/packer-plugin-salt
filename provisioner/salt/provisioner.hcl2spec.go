@@ -24,6 +24,7 @@ type FlatConfig struct {
 	TargetOS       		  *string           `mapstructure:"target_os" cty:"target_os" hcl:"target_os"`
 	EnvVars     		  []string          `mapstructure:"environment_vars" cty:"environment_vars" hcl:"environment_vars"`
 	EnvVarFormat          *string           `mapstructure:"env_var_format" cty:"env_var_format" hcl:"env_var_format"`
+	StateDir			  *string			`mapstructure:"state_directory" cty:"state_directory" hcl:"state_directory"`
 }
 
 // FlatMapstructure returns a new FlatConfig.
@@ -52,6 +53,7 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"target_os":    			  &hcldec.AttrSpec{Name: "target_os", Type: cty.String, Required: false},
 		"environment_vars":    		  &hcldec.AttrSpec{Name: "environment_vars", Type: cty.List(cty.String), Required: false},
 		"env_var_format":             &hcldec.AttrSpec{Name: "env_var_format", Type: cty.String, Required: false},
+		"state_directory":            &hcldec.AttrSpec{Name: "state_directory", Type: cty.String, Required: false},
 	}
 	return s
 }

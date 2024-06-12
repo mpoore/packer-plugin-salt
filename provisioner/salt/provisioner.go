@@ -72,6 +72,10 @@ type Config struct {
 	CleanStagingDir bool     `mapstructure:"clean_staging_directory"`
 	EnvVars         []string `mapstructure:"environment_vars"`
 	EnvVarFormat    string   `mapstructure:"env_var_format"`
+	// A path to the complete Salt structure on your local system
+	// to be copied to the remote machine as the `staging_directory` before all
+	// other files and directories.
+	StateDir string `mapstructure:"state_directory"`
 }
 
 type Provisioner struct {
@@ -121,11 +125,19 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		p.config.EnvVars = make([]string, 0)
 	}
 
+	// Configure default state_files collection
+	if p.config.StateFiles == nil {
+		p.config.StateFiles = make([]string, 0)
+	}
+
 	// Validation
 	var errs *packersdk.MultiError
-	// Check that state_files is specified
-	if len(p.config.StateFiles) == 0 {
-		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("The parameter state_files must be specified"))
+	// Check that either playbook_file or playbook_files is specified
+	if len(p.config.StateFiles) != 0 && p.config.StateDir != "" {
+		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("Either state_files or state_directory can be specified, not both"))
+	}
+	if len(p.config.StateFiles) == 0 && p.config.StateDir == "" {
+		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("Either state_files or state_directory must be specified"))
 	}
 
 	// Check that the files in state_files exist
@@ -146,6 +158,13 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		}
 	}
 
+	// Check that state_directory directory exists, if configured
+	if len(p.config.StateDir) > 0 {
+		if err := validateDirConfig(p.config.StateDir, "state_directory"); err != nil {
+			errs = packersdk.MultiErrorAppend(errs, err)
+		}
+	}
+
 	if errs != nil && len(errs.Errors) > 0 {
 		return errs
 	}
@@ -156,13 +175,22 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 	ui.Say("Provisioning with Salt...")
 	p.generatedData = generatedData
 
-	ui.Message("Creating Salt staging directory...")
-	if err := p.createDir(ui, comm, p.config.StagingDir); err != nil {
-		return fmt.Errorf("Error creating staging directory: %s", err)
+	if len(p.config.StateDir) > 0 {
+		ui.Message("Uploading state directory to Salt staging directory...")
+		if err := p.uploadDir(ui, comm, p.config.StagingDir, p.config.StateDir); err != nil {
+			return fmt.Errorf("Error uploading state_directory directory: %s", err)
+		}
+	} else {
+		ui.Message("Creating Salt staging directory...")
+		if err := p.createDir(ui, comm, p.config.StagingDir); err != nil {
+			return fmt.Errorf("Error creating staging directory: %s", err)
+		}
 	}
 
-	if err := p.uploadStateFiles(ui, comm); err != nil {
-		return err
+	if len(p.config.StateFiles) != 0 {
+		if err := p.uploadStateFiles(ui, comm); err != nil {
+			return err
+		}
 	}
 
 	if err := p.executeSalt(ui, comm); err != nil {
@@ -210,8 +238,14 @@ func (p *Provisioner) executeSalt(ui packersdk.Ui, comm packersdk.Communicator) 
 	envVars := p.createFlattenedEnvVars()
 
 	// Execute Salt
-	for _, stateFile := range p.stateFiles {
-		if err := p.executeSaltState(ui, comm, envVars, stateFile); err != nil {
+	if len(p.config.StateFiles) != 0 {
+		for _, stateFile := range p.stateFiles {
+			if err := p.executeSaltState(ui, comm, envVars, stateFile); err != nil {
+				return err
+			}
+		}
+	} else {
+		if err := p.executeSaltState(ui, comm, envVars, ""); err != nil {
 			return err
 		}
 	}

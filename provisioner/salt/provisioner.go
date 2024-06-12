@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/hcldec"
@@ -23,6 +24,8 @@ import (
 var saltConfigMap = map[string]string{
 	"configStagingDir_linux":   "/tmp/packer-provisioner-salt",
 	"configStagingDir_windows": "C:/Windows/Temp/packer-provisioner-salt",
+	"configEnvFormat_linux":    "%s='%s' ",
+	"configEnvFormat_windows":  "%s='%s' ",
 }
 
 var saltCommandMap = map[string]string{
@@ -66,42 +69,9 @@ type Config struct {
 	StagingDir string `mapstructure:"staging_directory"`
 	// If set to `true`, the content of the `staging_directory` will be removed after
 	// applying Salt states. By default this is set to `false`.
-	CleanStagingDir bool `mapstructure:"clean_staging_directory"`
-	// Environment variables to make available for Salt.
-	// These arguments _will not_ be passed through a shell and arguments should
-	// not be quoted. Usage example:
-	//
-	// ```json
-	//    "extra_arguments": [ "--extra-vars", "Region={{user `Region`}} Stage={{user `Stage`}}" ]
-	// ```
-	//
-	// In certain scenarios where you want to pass ansible command line arguments
-	// that include parameter and value (for example `--vault-password-file pwfile`),
-	// from ansible documentation this is correct format but that is NOT accepted here.
-	// Instead you need to do it like `--vault-password-file=pwfile`.
-	//
-	// If you are running a Windows build on AWS, Azure, Google Compute, or OpenStack
-	// and would like to access the auto-generated password that Packer uses to
-	// connect to a Windows instance via WinRM, you can use the template variable
-	//
-	// ```build.Password``` in HCL templates or ```{{ build `Password`}}``` in
-	// legacy JSON templates. For example:
-	//
-	// in JSON templates:
-	//
-	// ```json
-	// "extra_arguments": [
-	//    "--extra-vars", "winrm_password={{ build `Password`}}"
-	// ]
-	// ```
-	//
-	// in HCL templates:
-	// ```hcl
-	// extra_arguments = [
-	//    "--extra-vars", "winrm_password=${build.Password}"
-	// ]
-	// ```
-	EnvVars []string `mapstructure:"env_vars"`
+	CleanStagingDir bool     `mapstructure:"clean_staging_directory"`
+	EnvVars         []string `mapstructure:"environment_vars"`
+	EnvVarFormat    string   `mapstructure:"env_var_format"`
 }
 
 type Provisioner struct {
@@ -135,9 +105,20 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	} else {
 		p.config.TargetOS = strings.ToLower(p.config.TargetOS)
 	}
+
+	// Set environment variable format
+	if p.config.EnvVarFormat == "" {
+		p.config.EnvVarFormat = p.getConfig("configEnvFormat")
+	}
+
 	// Configure the staging directory
 	if p.config.StagingDir == "" {
 		p.config.StagingDir = p.getConfig("configStagingDir")
+	}
+
+	// Configure default environment variables map
+	if p.config.EnvVars == nil {
+		p.config.EnvVars = make([]string, 0)
 	}
 
 	// Validation
@@ -146,12 +127,22 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	if len(p.config.StateFiles) == 0 {
 		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("The parameter state_files must be specified"))
 	}
+
 	// Check that the files in state_files exist
 	for _, stateFile := range p.config.StateFiles {
 		if err := validateFileConfig(stateFile, "state_files", true); err != nil {
 			errs = packersdk.MultiErrorAppend(errs, err)
 		} else {
 			p.stateFiles = append(p.stateFiles, stateFile)
+		}
+	}
+
+	// Do a check for bad environment variables, such as '=foo', 'foobar'
+	for _, kv := range p.config.EnvVars {
+		vs := strings.SplitN(kv, "=", 2)
+		if len(vs) != 2 || vs[0] == "" {
+			errs = packersdk.MultiErrorAppend(errs,
+				fmt.Errorf("Environment variable not in format 'key=value': %s", kv))
 		}
 	}
 
@@ -216,10 +207,7 @@ func (p *Provisioner) uploadStateFile(ui packersdk.Ui, comm packersdk.Communicat
 
 func (p *Provisioner) executeSalt(ui packersdk.Ui, comm packersdk.Communicator) error {
 	// Prepare environment variables
-	envVars := ""
-	if len(p.config.EnvVars) > 0 {
-		envVars = envVars + strings.Join(p.config.EnvVars, " ") + " "
-	}
+	envVars := p.createFlattenedEnvVars()
 
 	// Execute Salt
 	for _, stateFile := range p.stateFiles {
@@ -359,4 +347,37 @@ func (p *Provisioner) getConfig(valueName string) string {
 func (p *Provisioner) getOSType() string {
 
 	return osTypeMap[p.config.TargetOS]
+}
+
+func (p *Provisioner) createFlattenedEnvVars() string {
+	keys, envVars := p.escapeEnvVars()
+
+	// Re-assemble vars into specified format and flatten
+	var flattened string
+	for _, key := range keys {
+		flattened += fmt.Sprintf(p.config.EnvVarFormat, key, envVars[key])
+	}
+
+	return flattened
+}
+
+func (p *Provisioner) escapeEnvVars() ([]string, map[string]string) {
+	envVars := make(map[string]string)
+
+	// Split vars into key/value components
+	for _, envVar := range p.config.EnvVars {
+		keyValue := strings.SplitN(envVar, "=", 2)
+		// Store pair, replacing any single quotes in value so they parse
+		// correctly with required environment variable format
+		envVars[keyValue[0]] = strings.Replace(keyValue[1], "'", `'"'"'`, -1)
+	}
+
+	// Create a list of env var keys in sorted order
+	var keys []string
+	for k := range envVars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	return keys, envVars
 }

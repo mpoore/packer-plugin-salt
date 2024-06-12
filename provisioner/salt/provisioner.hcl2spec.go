@@ -22,7 +22,8 @@ type FlatConfig struct {
 	StagingDir            *string           `mapstructure:"staging_directory" cty:"staging_directory" hcl:"staging_directory"`
 	CleanStagingDir       *bool             `mapstructure:"clean_staging_directory" cty:"clean_staging_directory" hcl:"clean_staging_directory"`
 	TargetOS       		  *string           `mapstructure:"target_os" cty:"target_os" hcl:"target_os"`
-	EnvVars     		  []string          `mapstructure:"env_vars" cty:"env_vars" hcl:"env_vars"`
+	EnvVars     		  []string          `mapstructure:"environment_vars" cty:"environment_vars" hcl:"environment_vars"`
+	EnvVarFormat          *string           `mapstructure:"env_var_format" cty:"env_var_format" hcl:"env_var_format"`
 }
 
 // FlatMapstructure returns a new FlatConfig.
@@ -49,7 +50,8 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"staging_directory":          &hcldec.AttrSpec{Name: "staging_directory", Type: cty.String, Required: false},
 		"clean_staging_directory":    &hcldec.AttrSpec{Name: "clean_staging_directory", Type: cty.Bool, Required: false},
 		"target_os":    			  &hcldec.AttrSpec{Name: "target_os", Type: cty.String, Required: false},
-		"env_vars":    				  &hcldec.AttrSpec{Name: "env_vars", Type: cty.List(cty.String), Required: false},
+		"environment_vars":    		  &hcldec.AttrSpec{Name: "environment_vars", Type: cty.List(cty.String), Required: false},
+		"env_var_format":             &hcldec.AttrSpec{Name: "env_var_format", Type: cty.String, Required: false},
 	}
 	return s
 }

@@ -1,0 +1,24 @@
+<!-- Code generated from the comments of the Config struct in provisioner/salt/provisioner.go; DO NOT EDIT MANUALLY -->
+
+- `target_os` (string) - The target OS that the workload is using. This value is used to determine whether a
+  Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
+  In a future version this option may facilitate the installation of the salt-minion.
+
+- `state_files` ([]string) - The state files to be applied by Salt. These files must exist on
+  your local system where Packer is executing.
+
+- `staging_directory` (string) - The directory where files will be uploaded. Packer requires write
+  permissions in this directory. Default values are used if this option is no set.
+
+- `clean_staging_directory` (bool) - If set to `true`, the content of the `staging_directory` will be removed after
+  applying Salt states. By default this is set to `false`.
+
+- `environment_vars` ([]string) - Env Vars
+
+- `env_var_format` (string) - Env Var Format
+
+- `state_directory` (string) - A path to the complete Salt structure on your local system
+  to be copied to the remote machine as the `staging_directory` before all
+  other files and directories.
+
+<!-- End of code generated from the comments of the Config struct in provisioner/salt/provisioner.go; -->

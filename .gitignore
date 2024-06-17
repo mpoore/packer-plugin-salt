@@ -1,6 +1,9 @@
 main
-dist/*
-docs-rendered/*
 packer-plugin-salt
-.docs
+**/packer_log*.txt
+**/git_*test.pkr.hcl
 crash.log
+
+dist/*
+.docs/*
+docs.zip

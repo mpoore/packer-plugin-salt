@@ -1,4 +1,4 @@
-module github.com/hashicorp/packer-plugin-salt
+module github.com/mpoore/packer-plugin-salt
 
 go 1.22.4
 

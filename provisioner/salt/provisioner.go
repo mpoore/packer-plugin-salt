@@ -59,23 +59,76 @@ type Config struct {
 	ctx                 interpolate.Context
 	// The target OS that the workload is using. This value is used to determine whether a
 	// Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
-	// In a future version this option may facilitate the installation of the salt-minion.
+	// Supported values for the selection dictated by the supported OS for running `salt-minion``:
+	// *amazon
+	// *arch
+	// *centos
+	// *debian
+	// *fedora
+	// *freebsd
+	// *linux
+	// *macos
+	// *oracle
+	// *photon
+	// *redhat
+	// *suse
+	// *ubuntu
+	// *windows
+	// Presently this option determines some of the defaults used by the provisioner.
 	TargetOS string `mapstructure:"target_os"`
-	// The state files to be applied by Salt. These files must exist on
-	// your local system where Packer is executing.
+	// The individual state files to be applied by Salt. These files must exist on
+	// your local system where Packer is executing. State files are applied in the order
+	// in which they appear in the `state_files` parameter. This option is exclusive
+	// with `state_directory`.
 	StateFiles []string `mapstructure:"state_files"`
-	// The directory where files will be uploaded. Packer requires write
-	// permissions in this directory. Default values are used if this option is no set.
+	// The directory where files will be uploaded to on the target system. Packer requires write
+	// permissions in this directory. Default values are used if this option is not set.
+	// The default value used will depend on the value of `target_os`. The default `staging_directory`
+	// for Linux systems is:
+	// ```/tmp/packer-provisioner-salt```
+	// For Windows systems the default is:
+	// ```C:/Windows/Temp/packer-provisioner-salt```
+	// Windows paths are recommended to be set using ```/``` as the delimiter owing to more conventional
+	// characters causing issues when this plugin is executed on a Linux system.
 	StagingDir string `mapstructure:"staging_directory"`
 	// If set to `true`, the content of the `staging_directory` will be removed after
 	// applying Salt states. By default this is set to `false`.
-	CleanStagingDir bool     `mapstructure:"clean_staging_directory"`
-	EnvVars         []string `mapstructure:"environment_vars"`
-	EnvVarFormat    string   `mapstructure:"env_var_format"`
-	// A path to the complete Salt structure on your local system
-	// to be copied to the remote machine as the `staging_directory` before all
-	// other files and directories.
-	StateDir string `mapstructure:"state_directory"`
+	CleanStagingDir bool `mapstructure:"clean_staging_directory"`
+	// A collection of environment variables that will be made available to the Salt process
+	// when it is executed. The intended purpose of this facility is to enable secrets or
+	// environment-specific information to be consumed when applying Salt states.
+	//
+	// For example:
+	//
+	// ```hcl
+	// environment_vars = [ "SECRET_VALUE=${ var.build_secret }",
+	//                      "CONFIG_VALUE=${ var.config_value }" ]
+	// ```
+	// This would expose the environment variables `SECRET_VALUE` and `CONFIG_VALUE` to the Salt process.
+	// These environment variables can then be consumed within Salt states, for example:
+	//
+	// ```text
+	// {% set secret_value = salt['environ.get']('SECRET_VALUE', 'default_value') %}
+	// {% set config_value = salt['environ.get']('CONFIG_VALUE', 'default_value') %}
+	// # Echo config value
+	// echo config value:
+	// cmd.run:
+	//  - name: echo {{ config_value }}
+	// ```
+	EnvVars []string `mapstructure:"environment_vars"`
+	// An advanced option used to customize the format of the `environment_vars` supplied to the Salt process.
+	// The default format for environment variables is:
+	//
+	// ```VARNAME='VARVALUE' ```
+	// **Note:** There is a trailing space in the default value that is required to separate environment varables from each other.
+	EnvVarFormat string `mapstructure:"env_var_format"`
+	// A path to the complete Salt State Tree on your local system to be copied to the remote machine as the
+	// `staging_directory`. The structure of the State Tree is flexible, however the use of this option assumes
+	// that a `top.sls` file is present at the top of the State Tree. The plugin assumes that Salt will evaluate
+	// the `top.sls` file and match expressions to determine which individual states should be applied. This action
+	// is referred to as a "highstate".
+	// For more details about states and highstates, refer to the [Salt documentation](https://docs.saltproject.io/en/latest/topics/tutorials/starting_states.html).
+	StateTree string `mapstructure:"state_tree"`
 }
 
 type Provisioner struct {
@@ -132,12 +185,12 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 
 	// Validation
 	var errs *packersdk.MultiError
-	// Check that either playbook_file or playbook_files is specified
-	if len(p.config.StateFiles) != 0 && p.config.StateDir != "" {
-		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("Either state_files or state_directory can be specified, not both"))
+	// Check that either state_files or state_tree is specified
+	if len(p.config.StateFiles) != 0 && p.config.StateTree != "" {
+		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("Either state_files or state_tree can be specified, not both"))
 	}
-	if len(p.config.StateFiles) == 0 && p.config.StateDir == "" {
-		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("Either state_files or state_directory must be specified"))
+	if len(p.config.StateFiles) == 0 && p.config.StateTree == "" {
+		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("Either state_files or state_tree must be specified"))
 	}
 
 	// Check that the files in state_files exist
@@ -158,9 +211,9 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		}
 	}
 
-	// Check that state_directory directory exists, if configured
-	if len(p.config.StateDir) > 0 {
-		if err := validateDirConfig(p.config.StateDir, "state_directory"); err != nil {
+	// Check that state_tree directory exists, if configured
+	if len(p.config.StateTree) > 0 {
+		if err := validateDirConfig(p.config.StateTree, "state_tree"); err != nil {
 			errs = packersdk.MultiErrorAppend(errs, err)
 		}
 	}
@@ -175,10 +228,10 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 	ui.Say("Provisioning with Salt...")
 	p.generatedData = generatedData
 
-	if len(p.config.StateDir) > 0 {
-		ui.Message("Uploading state directory to Salt staging directory...")
-		if err := p.uploadDir(ui, comm, p.config.StagingDir, p.config.StateDir); err != nil {
-			return fmt.Errorf("Error uploading state_directory directory: %s", err)
+	if len(p.config.StateTree) > 0 {
+		ui.Message("Uploading State Tree to Salt staging directory...")
+		if err := p.uploadDir(ui, comm, p.config.StagingDir, p.config.StateTree); err != nil {
+			return fmt.Errorf("Error uploading state_tree directory: %s", err)
 		}
 	} else {
 		ui.Message("Creating Salt staging directory...")

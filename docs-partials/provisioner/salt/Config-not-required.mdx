@@ -2,23 +2,74 @@
 
 - `target_os` (string) - The target OS that the workload is using. This value is used to determine whether a
   Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
-  In a future version this option may facilitate the installation of the salt-minion.
+  Supported values for the selection dictated by the supported OS for running `salt-minion``:
+  *amazon
+  *arch
+  *centos
+  *debian
+  *fedora
+  *freebsd
+  *linux
+  *macos
+  *oracle
+  *photon
+  *redhat
+  *suse
+  *ubuntu
+  *windows
+  Presently this option determines some of the defaults used by the provisioner.
 
-- `state_files` ([]string) - The state files to be applied by Salt. These files must exist on
-  your local system where Packer is executing.
+- `state_files` ([]string) - The individual state files to be applied by Salt. These files must exist on
+  your local system where Packer is executing. State files are applied in the order
+  in which they appear in the `state_files` parameter. This option is exclusive
+  with `state_tree`.
 
-- `staging_directory` (string) - The directory where files will be uploaded. Packer requires write
-  permissions in this directory. Default values are used if this option is no set.
+- `staging_directory` (string) - The directory where files will be uploaded to on the target system. Packer requires write
+  permissions in this directory. Default values are used if this option is not set.
+  The default value used will depend on the value of `target_os`. The default `staging_directory`
+  for Linux systems is:
+  ```/tmp/packer-provisioner-salt```
+  For Windows systems the default is:
+  ```C:/Windows/Temp/packer-provisioner-salt```
+  Windows paths are recommended to be set using ```/``` as the delimiter owing to more conventional
+  characters causing issues when this plugin is executed on a Linux system.
 
 - `clean_staging_directory` (bool) - If set to `true`, the content of the `staging_directory` will be removed after
   applying Salt states. By default this is set to `false`.
 
-- `environment_vars` ([]string) - Env Vars
+- `environment_vars` ([]string) - A collection of environment variables that will be made available to the Salt process
+  when it is executed. The intended purpose of this facility is to enable secrets or
+  environment-specific information to be consumed when applying Salt states.
+  
+  For example:
+  
+  ```hcl
+  environment_vars = [ "SECRET_VALUE=${ var.build_secret }",
+                       "CONFIG_VALUE=${ var.config_value }" ]
+  ```
+  This would expose the environment variables `SECRET_VALUE` and `CONFIG_VALUE` to the Salt process.
+  These environment variables can then be consumed within Salt states, for example:
+  
+  ```text
+  {% set secret_value = salt['environ.get']('SECRET_VALUE', 'default_value') %}
+  {% set config_value = salt['environ.get']('CONFIG_VALUE', 'default_value') %}
+  # Echo config value
+  echo config value:
+  cmd.run:
+   - name: echo {{ config_value }}
+  ```
 
-- `env_var_format` (string) - Env Var Format
+- `env_var_format` (string) - An advanced option used to customize the format of the `environment_vars` supplied to the Salt process.
+  The default format for environment variables is:
+  
+  ```VARNAME='VARVALUE' ```
+  **Note:** There is a trailing space in the default value that is required to separate environment varables from each other.
 
-- `state_directory` (string) - A path to the complete Salt structure on your local system
-  to be copied to the remote machine as the `staging_directory` before all
-  other files and directories.
+- `state_tree` (string) - A path to the complete Salt State Tree on your local system to be copied to the remote machine as the
+  `staging_directory`. The structure of the State Tree is flexible, however the use of this option assumes
+  that a `top.sls` file is present at the top of the State Tree. The plugin assumes that Salt will evaluate
+  the `top.sls` file and match expressions to determine which individual states should be applied. This action
+  is referred to as a "highstate".
+  For more details about states and highstates, refer to the [Salt documentation](https://docs.saltproject.io/en/latest/topics/tutorials/starting_states.html).
 
 <!-- End of code generated from the comments of the Config struct in provisioner/salt/provisioner.go; -->

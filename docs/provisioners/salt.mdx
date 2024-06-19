@@ -1,0 +1,92 @@
+---
+description: >
+  The ansible-local Packer provisioner will run ansible in ansible's "local"
+  mode on the remote/guest VM using Playbook and Role files that exist on the
+  guest VM. This means Ansible must be installed on the remote/guest VM.
+  Playbooks and Roles can be uploaded from your build machine (the one running
+  Packer) to the vm.
+page_title: Ansible Local - Provisioners
+nav_title: Ansible Local
+---
+
+# Salt Provisioner
+
+Type: `salt`
+
+The `ansible-local` Packer provisioner will execute `ansible` in Ansible's "local"
+mode on the remote/guest VM using Playbook and Role files that exist on the
+guest VM. This means Ansible must be installed on the remote/guest VM.
+Playbooks and Roles can be uploaded from your build machine (the one running
+Packer) to the vm. Ansible is then run on the guest machine in [local
+mode](https://docs.ansible.com/ansible/latest/playbooks_delegation.html#local-playbooks)
+via the `ansible-playbook` command.
+
+-> **Note:** The current version of this plugin does **not** automatically install the required `salt-minion` package. It is assumed when calling this provisioner that installation of the `salt-minion` has already taken place. Commonly users may employ the [shell provisioner](/packer/docs/provisioners/shell) (or similar) to install the `salt-minion` or include the necessary steps within their KickStart or seed file for their build. Instructions for installing the `salt-minion` are be located on the [SaltProject website](https://docs.saltproject.io/salt/install-guide/en/latest/).
+
+-> **Note:** The `salt-minion` package need only be installed, it does not need to be enabled as a service or configured with a `salt-master`.
+
+## Basic Example
+
+The example below is fully functional.
+
+**HCL2**
+
+```hcl
+variable "topping" {
+  type    = string
+  default = "mushroom"
+}
+
+source "docker" "example" {
+  image       = "williamyeh/ansible:ubuntu14.04"
+  export_path = "packer_example"
+  run_command = ["-d", "-i", "-t", "--entrypoint=/bin/bash", "{{.Image}}"]
+}
+
+build {
+  sources = [
+    "source.docker.example"
+  ]
+
+  provisioner "ansible-local" {
+    playbook_file   = "./playbook.yml"
+    extra_arguments = ["--extra-vars", "\"pizza_toppings=${var.topping}\""]
+  }
+}
+```
+
+where ./playbook.yml contains
+
+```
+---
+- name: hello world
+  hosts: 127.0.0.1
+  connection: local
+
+  tasks:
+    - command: echo {{ pizza_toppings }}
+    - debug: msg="{{ pizza_toppings }}"
+
+```
+
+## Configuration Reference
+
+The reference of available configuration options is listed below.
+
+Required (one, not both, of):
+
+- `state_files` (array of strings) - The individual state files to be applied by Salt. These files must exist on
+	your local system where Packer is executing. State files are applied in the order
+	in which they appear in the `state_files` parameter.
+
+- `state_tree` (array of strings) - A path to the complete Salt State Tree on your local system to be copied to the remote machine.
+  The structure of the State Tree is flexible, however the use of this option assumes
+	that a `top.sls` file is present at the top of the State Tree. The plugin assumes that Salt will evaluate
+	the `top.sls` file and match expressions to determine which individual states should be applied. This action
+	is referred to as a "highstate".
+
+Optional:
+
+@include '/provisioner/salt/Config-not-required.mdx'
+
+@include 'provisioners/common-config.mdx'

@@ -24,6 +24,8 @@ import (
 var saltConfigMap = map[string]string{
 	"configStagingDir_linux":   "/tmp/packer-provisioner-salt",
 	"configStagingDir_windows": "C:/Windows/Temp/packer-provisioner-salt",
+	"configPillarDir_linux":    "/tmp/packer-provisioner-salt-pillar",
+	"configPillarDir_windows":  "C:/Windows/Temp/packer-provisioner-salt-pillar",
 	"configEnvFormat_linux":    "%s='%s' ",
 	"configEnvFormat_windows":  "%s='%s' ",
 }
@@ -59,41 +61,45 @@ type Config struct {
 	ctx                 interpolate.Context
 	// The target OS that the workload is using. This value is used to determine whether a
 	// Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
-	// Supported values for the selection dictated by the supported OS for running `salt-minion``:
-	// *amazon
-	// *arch
-	// *centos
-	// *debian
-	// *fedora
-	// *freebsd
-	// *linux
-	// *macos
-	// *oracle
-	// *photon
-	// *redhat
-	// *suse
-	// *ubuntu
-	// *windows
+	// Supported values for the selection dictated by the supported OS for running `salt-minion`:
+	//
+	// amazon, arch, centos, debian, fedora, freebsd, linux, macos, oracle, photon, redhat, suse, ubuntu, windows
+	//
 	// Presently this option determines some of the defaults used by the provisioner.
 	TargetOS string `mapstructure:"target_os"`
 	// The individual state files to be applied by Salt. These files must exist on
 	// your local system where Packer is executing. State files are applied in the order
-	// in which they appear in the `state_files` parameter. This option is exclusive
-	// with `state_directory`.
+	// in which they appear in the parameter. This option is exclusive
+	// with `state_tree`.
 	StateFiles []string `mapstructure:"state_files"`
+	// A path to the complete Salt State Tree on your local system to be copied to the remote machine as the
+	// `staging_directory`. The structure of the State Tree is flexible, however the use of this option assumes
+	// that a `top.sls` file is present at the top of the State Tree. The plugin assumes that Salt will evaluate
+	// the `top.sls` file and match expressions to determine which individual states should be applied. This action
+	// is referred to as a "highstate". This option is exclusive with `state_files`.
+	//
+	// For more details about states and highstates, refer to the [Salt documentation](https://docs.saltproject.io/en/latest/topics/tutorials/starting_states.html).
+	StateTree string `mapstructure:"state_tree"`
 	// The directory where files will be uploaded to on the target system. Packer requires write
 	// permissions in this directory. Default values are used if this option is not set.
-	// The default value used will depend on the value of `target_os`. The default `staging_directory`
-	// for Linux systems is:
-	// ```/tmp/packer-provisioner-salt```
+	// The default value used will depend on the value of `target_os`. The default for Linux systems is:
+	//
+	// ```
+	// /tmp/packer-provisioner-salt
+	// ```
+	//
 	// For Windows systems the default is:
-	// ```C:/Windows/Temp/packer-provisioner-salt```
-	// Windows paths are recommended to be set using ```/``` as the delimiter owing to more conventional
+	//
+	// ```
+	// C:/Windows/Temp/packer-provisioner-salt
+	// ```
+	//
+	// Windows paths are recommended to be set using `/` as the delimiter owing to more conventional
 	// characters causing issues when this plugin is executed on a Linux system.
 	StagingDir string `mapstructure:"staging_directory"`
-	// If set to `true`, the content of the `staging_directory` will be removed after
+	// If set to `true`, the contents uploaded to the target system will be removed after
 	// applying Salt states. By default this is set to `false`.
-	CleanStagingDir bool `mapstructure:"clean_staging_directory"`
+	Clean bool `mapstructure:"clean"`
 	// A collection of environment variables that will be made available to the Salt process
 	// when it is executed. The intended purpose of this facility is to enable secrets or
 	// environment-specific information to be consumed when applying Salt states.
@@ -119,16 +125,12 @@ type Config struct {
 	// An advanced option used to customize the format of the `environment_vars` supplied to the Salt process.
 	// The default format for environment variables is:
 	//
-	// ```VARNAME='VARVALUE' ```
+	// ```
+	// "VARNAME='VARVALUE' "
+	// ```
+	//
 	// **Note:** There is a trailing space in the default value that is required to separate environment varables from each other.
 	EnvVarFormat string `mapstructure:"env_var_format"`
-	// A path to the complete Salt State Tree on your local system to be copied to the remote machine as the
-	// `staging_directory`. The structure of the State Tree is flexible, however the use of this option assumes
-	// that a `top.sls` file is present at the top of the State Tree. The plugin assumes that Salt will evaluate
-	// the `top.sls` file and match expressions to determine which individual states should be applied. This action
-	// is referred to as a "highstate".
-	// For more details about states and highstates, refer to the [Salt documentation](https://docs.saltproject.io/en/latest/topics/tutorials/starting_states.html).
-	StateTree string `mapstructure:"state_tree"`
 }
 
 type Provisioner struct {
@@ -250,8 +252,8 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 		return fmt.Errorf("Error executing Salt: %s", err)
 	}
 
-	if p.config.CleanStagingDir {
-		ui.Message("Removing staging directory...")
+	if p.config.Clean {
+		ui.Message("Removing staging directory and contents...")
 		if err := p.removeDir(ui, comm, p.config.StagingDir); err != nil {
 			return fmt.Errorf("Error removing staging directory: %s", err)
 		}

@@ -80,34 +80,26 @@ Optional:
   Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
   Supported values for the selection dictated by the supported OS for running `salt-minion`:
   
-  ```text
-  amazon
-  arch
-  centos
-  debian
-  fedora
-  freebsd
-  linux
-  macos
-  oracle
-  photon
-  redhat
-  suse
-  ubuntu
-  windows
-  ```
+  amazon, arch, centos, debian, fedora, freebsd, linux, macos, oracle, photon, redhat, suse, ubuntu, windows
   
   Presently this option determines some of the defaults used by the provisioner.
 
 - `state_files` ([]string) - The individual state files to be applied by Salt. These files must exist on
   your local system where Packer is executing. State files are applied in the order
-  in which they appear in the `state_files` parameter. This option is exclusive
+  in which they appear in the parameter. This option is exclusive
   with `state_tree`.
+
+- `state_tree` (string) - A path to the complete Salt State Tree on your local system to be copied to the remote machine as the
+  `staging_directory`. The structure of the State Tree is flexible, however the use of this option assumes
+  that a `top.sls` file is present at the top of the State Tree. The plugin assumes that Salt will evaluate
+  the `top.sls` file and match expressions to determine which individual states should be applied. This action
+  is referred to as a "highstate". This option is exclusive with `state_files`.
+  
+  For more details about states and highstates, refer to the [Salt documentation](https://docs.saltproject.io/en/latest/topics/tutorials/starting_states.html).
 
 - `staging_directory` (string) - The directory where files will be uploaded to on the target system. Packer requires write
   permissions in this directory. Default values are used if this option is not set.
-  The default value used will depend on the value of `target_os`. The default `staging_directory`
-  for Linux systems is:
+  The default value used will depend on the value of `target_os`. The default for Linux systems is:
   
   ```
   /tmp/packer-provisioner-salt
@@ -122,7 +114,7 @@ Optional:
   Windows paths are recommended to be set using `/` as the delimiter owing to more conventional
   characters causing issues when this plugin is executed on a Linux system.
 
-- `clean_staging_directory` (bool) - If set to `true`, the content of the `staging_directory` will be removed after
+- `clean` (bool) - If set to `true`, the contents uploaded to the target system will be removed after
   applying Salt states. By default this is set to `false`.
 
 - `environment_vars` ([]string) - A collection of environment variables that will be made available to the Salt process
@@ -155,14 +147,6 @@ Optional:
   ```
   
   **Note:** There is a trailing space in the default value that is required to separate environment varables from each other.
-
-- `state_tree` (string) - A path to the complete Salt State Tree on your local system to be copied to the remote machine as the
-  `staging_directory`. The structure of the State Tree is flexible, however the use of this option assumes
-  that a `top.sls` file is present at the top of the State Tree. The plugin assumes that Salt will evaluate
-  the `top.sls` file and match expressions to determine which individual states should be applied. This action
-  is referred to as a "highstate".
-  
-  For more details about states and highstates, refer to the [Salt documentation](https://docs.saltproject.io/en/latest/topics/tutorials/starting_states.html).
 
 <!-- End of code generated from the comments of the Config struct in provisioner/salt/provisioner.go; -->
 

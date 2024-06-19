@@ -24,9 +24,9 @@ $ packer plugins install github.com/mpoore/salt
 
 ### Components
 
-**Note:** The current version of this plugin does **not** automatically install the required `salt-minion` package. It is assumed when calling this provisioner that installation of the `salt-minion` has already taken place. Commonly users may employ the shell provisioner (or similar) to install the `salt-minion` or include the necessary steps within their KickStart or seed file for their build. Instructions for installing the `salt-minion` are be located on the [SaltProject website](https://docs.saltproject.io/salt/install-guide/en/latest/).
+**Note:** The current version of this plugin does **not** automatically install the required `salt-minion` package. It is assumed when calling this provisioner that installation of the Salt Minion has already taken place. Commonly users may employ the shell provisioner (or similar) to install the Salt Minion or include the necessary steps within their KickStart or seed file for their build. Instructions for installing the Salt Minion are be located on the [SaltProject website](https://docs.saltproject.io/salt/install-guide/en/latest/).
 
-**Note:** The `salt-minion` package need only be installed, it does not need to be enabled as a service or configured with a `salt-master`.
+**Note:** The Salt Minion package need only be installed, it does not need to be enabled as a service or configured with a Salt Master.
 
 #### Provisioners
 

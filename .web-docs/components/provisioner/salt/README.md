@@ -1,16 +1,18 @@
 Type: `salt`
 
-The `ansible-local` Packer provisioner will execute `ansible` in Ansible's "local"
-mode on the remote/guest VM using Playbook and Role files that exist on the
-guest VM. This means Ansible must be installed on the remote/guest VM.
-Playbooks and Roles can be uploaded from your build machine (the one running
-Packer) to the vm. Ansible is then run on the guest machine in [local
-mode](https://docs.ansible.com/ansible/latest/playbooks_delegation.html#local-playbooks)
-via the `ansible-playbook` command.
+The Salt Packer provisioner executes Salt's "masterless" or "local"
+mode on the guest operating system of the image that Packer is building.
+Salt state files that exist on the guest operating system are used to customize
+the image to meet a defined desired state. This means the Salt Minion package
+must be installed on the guest operating system.
+State files can be uploaded from your local build machine (the one running
+Packer) by this plugin. Salt is then invoked on the guest machine in [masterless
+mode](https://docs.saltproject.io/en/latest/topics/tutorials/quickstart.html)
+via the `salt-call` command.
 
--> **Note:** The current version of this plugin does **not** automatically install the required `salt-minion` package. It is assumed when calling this provisioner that installation of the `salt-minion` has already taken place. Commonly users may employ the [shell provisioner](/packer/docs/provisioner/shell) (or similar) to install the `salt-minion` or include the necessary steps within their KickStart or seed file for their build. Instructions for installing the `salt-minion` are be located on the [SaltProject website](https://docs.saltproject.io/salt/install-guide/en/latest/).
+-> **Note:** The current version of this plugin does **not** automatically install the required `salt-minion` package. It is assumed when calling this provisioner that installation of the Salt Minion has already taken place. Commonly users may employ the [shell provisioner](/packer/docs/provisioner/shell) (or similar) to install the Salt Minion or include the necessary steps within their KickStart or seed file for their build. Instructions for installing the Salt Minion are be located on the [SaltProject website](https://docs.saltproject.io/salt/install-guide/en/latest/).
 
--> **Note:** The `salt-minion` package need only be installed, it does not need to be enabled as a service or configured with a `salt-master`.
+-> **Note:** The `salt-minion` package need only be installed, it does not need to be enabled as a service or configured with a Salt Master.
 
 ## Basic Example
 
@@ -19,13 +21,22 @@ The example below is fully functional.
 **HCL2**
 
 ```hcl
+packer {
+  required_plugins {
+    salt = {
+      version = ">= 0.1.2"
+      source  = "github.com/mpoore/salt"
+    }
+  }
+}
+
 variable "topping" {
   type    = string
   default = "mushroom"
 }
 
 source "docker" "example" {
-  image       = "williamyeh/ansible:ubuntu14.04"
+  image       = "mpoore/salt-example:latest"
   export_path = "packer_example"
   run_command = ["-d", "-i", "-t", "--entrypoint=/bin/bash", "{{.Image}}"]
 }
@@ -35,25 +46,19 @@ build {
     "source.docker.example"
   ]
 
-  provisioner "ansible-local" {
-    playbook_file   = "./playbook.yml"
-    extra_arguments = ["--extra-vars", "\"pizza_toppings=${var.topping}\""]
+  provisioner "salt" {
+    state_files      = [ "example.sls" ]
+    environment_vars = [ "TOPPINGS=${ var.topping }" ]
   }
 }
 ```
 
-where ./playbook.yml contains
+where example.sls contains
 
 ```
----
-- name: hello world
-  hosts: 127.0.0.1
-  connection: local
-
-  tasks:
-    - command: echo {{ pizza_toppings }}
-    - debug: msg="{{ pizza_toppings }}"
-
+echo_toppings:
+  cmd.run:
+    - name: 'echo $TOPPINGS'
 ```
 
 ## Configuration Reference
@@ -78,9 +83,10 @@ Optional:
 
 - `target_os` (string) - The target OS that the workload is using. This value is used to determine whether a
   Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
-  Supported values for the selection dictated by the supported OS for running `salt-minion`:
+  Supported values for the selection are:
   
-  amazon, arch, centos, debian, fedora, freebsd, linux, macos, oracle, photon, redhat, suse, ubuntu, windows
+  `linux` - This denotes that the target runs a Linux or Unix operating system.
+  `windows` - This denotes that the target runs a Windows operating system.
   
   Presently this option determines some of the defaults used by the provisioner.
 

@@ -10,7 +10,7 @@ packer {
     salt = {
       # source represents the GitHub URI to the plugin repository without the `packer-plugin-` prefix.
       source  = "github.com/mpoore/salt"
-      version = ">=0.1.1"
+      version = ">=0.1.2"
     }
   }
 }

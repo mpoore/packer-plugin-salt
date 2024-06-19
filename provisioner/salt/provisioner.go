@@ -61,9 +61,10 @@ type Config struct {
 	ctx                 interpolate.Context
 	// The target OS that the workload is using. This value is used to determine whether a
 	// Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
-	// Supported values for the selection dictated by the supported OS for running `salt-minion`:
+	// Supported values for the selection are:
 	//
-	// amazon, arch, centos, debian, fedora, freebsd, linux, macos, oracle, photon, redhat, suse, ubuntu, windows
+	// `linux` - This denotes that the target runs a Linux or Unix operating system.
+	// `windows` - This denotes that the target runs a Windows operating system.
 	//
 	// Presently this option determines some of the defaults used by the provisioner.
 	TargetOS string `mapstructure:"target_os"`

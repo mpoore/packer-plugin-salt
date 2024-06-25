@@ -30,4 +30,4 @@ $ packer plugins install github.com/mpoore/salt
 
 #### Provisioners
 
-- salt - The Packer provisioner will transfer Salt state files to the target guest operating system and execute `Salt` to apply the configured desired state.
+- [salt](https://developer.hashicorp.com/packer/integrations/mpoore/salt/latest/components/provisioner/salt) - The Packer provisioner will transfer Salt state files to the target guest operating system and execute `Salt` to apply the configured desired state.

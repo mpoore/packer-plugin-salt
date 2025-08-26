@@ -22,7 +22,7 @@ Then, run [`packer init`](https://www.packer.io/docs/commands/init).
 packer {
   required_plugins {
     salt = {
-      version = ">= 0.1.2"
+      version = ">= 0.2.0"
       source  = "github.com/mpoore/salt"
     }
   }
@@ -41,7 +41,7 @@ To install the plugin, please follow the Packer documentation on
 
 ### From Sources
 
-If you prefer to build the plugin from sources, clone the GitHub repository
+If you prefer to build the plugin from source, clone the GitHub repository
 locally and run the command `go build` from the root
 directory. Upon successful compilation, a `packer-plugin-salt` plugin
 binary file can be found in the root directory.

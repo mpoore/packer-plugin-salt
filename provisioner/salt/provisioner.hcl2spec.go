@@ -22,6 +22,10 @@ type FlatConfig struct {
 	StateFiles          []string          `mapstructure:"state_files" cty:"state_files" hcl:"state_files"`
 	StateTree           *string           `mapstructure:"state_tree" cty:"state_tree" hcl:"state_tree"`
 	StagingDir          *string           `mapstructure:"staging_directory" cty:"staging_directory" hcl:"staging_directory"`
+	StateDir            *string           `mapstructure:"state_directory" cty:"state_directory" hcl:"state_directory"`
+	PillarFiles         []string          `mapstructure:"pillar_files" cty:"pillar_files" hcl:"pillar_files"`
+	PillarTree          *string           `mapstructure:"pillar_tree" cty:"pillar_tree" hcl:"pillar_tree"`
+	PillarDir           *string           `mapstructure:"pillar_directory" cty:"pillar_directory" hcl:"pillar_directory"`
 	Clean               *bool             `mapstructure:"clean" cty:"clean" hcl:"clean"`
 	EnvVars             []string          `mapstructure:"environment_vars" cty:"environment_vars" hcl:"environment_vars"`
 	EnvVarFormat        *string           `mapstructure:"env_var_format" cty:"env_var_format" hcl:"env_var_format"`
@@ -51,6 +55,10 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"state_files":                &hcldec.AttrSpec{Name: "state_files", Type: cty.List(cty.String), Required: false},
 		"state_tree":                 &hcldec.AttrSpec{Name: "state_tree", Type: cty.String, Required: false},
 		"staging_directory":          &hcldec.AttrSpec{Name: "staging_directory", Type: cty.String, Required: false},
+		"state_directory":            &hcldec.AttrSpec{Name: "state_directory", Type: cty.String, Required: false},
+		"pillar_files":               &hcldec.AttrSpec{Name: "pillar_files", Type: cty.List(cty.String), Required: false},
+		"pillar_tree":                &hcldec.AttrSpec{Name: "pillar_tree", Type: cty.String, Required: false},
+		"pillar_directory":           &hcldec.AttrSpec{Name: "pillar_directory", Type: cty.String, Required: false},
 		"clean":                      &hcldec.AttrSpec{Name: "clean", Type: cty.Bool, Required: false},
 		"environment_vars":           &hcldec.AttrSpec{Name: "environment_vars", Type: cty.List(cty.String), Required: false},
 		"env_var_format":             &hcldec.AttrSpec{Name: "env_var_format", Type: cty.String, Required: false},

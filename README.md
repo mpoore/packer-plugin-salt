@@ -22,7 +22,7 @@ Then, run [`packer init`](https://www.packer.io/docs/commands/init).
 packer {
   required_plugins {
     salt = {
-      version = ">= 0.2.0"
+      version = ">= 0.5.0"
       source  = "github.com/mpoore/salt"
     }
   }

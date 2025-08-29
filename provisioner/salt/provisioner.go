@@ -48,42 +48,122 @@ type Config struct {
 	ctx interpolate.Context
 
 	// USER FACING CONFIGURATION
-	// The target OS that the workload is using. Defaults to "linux".
-	// Supported values: "linux", "windows".
+	// The target OS that the workload is using. This value is used to determine whether a
+	// Windows or Linux OS is in use. If not specified, this value defaults to `linux`.
+	// Supported values for the selection are:
+	//
+	// `linux` - This denotes that the target runs a Linux or Unix operating system.
+	// `windows` - This denotes that the target runs a Windows operating system.
+	//
+	// Presently this option determines some of the defaults used by the provisioner.
 	TargetOS string `mapstructure:"target_os"`
 
-	// List of individual state files to apply. Exclusive with state_tree.
+	// The individual state files to be applied by Salt. These files must exist on
+	// your local system where Packer is executing. State files are applied in the order
+	// in which they appear in the parameter. This option is exclusive
+	// with `state_tree`.
 	StateFiles []string `mapstructure:"state_files"`
 
-	// Path to the complete Salt State Tree. Exclusive with state_files.
+	// A path to the complete Salt state tree on your local system to be copied to the remote machine as the
+	// `state_directory`. The structure of the state tree is flexible, however the use of this option assumes
+	// that a `top.sls` file is present at the top of the state tree. The plugin assumes that Salt will evaluate
+	// the `top.sls` file and match expressions to determine which individual states should be applied. This action
+	// is referred to as a "highstate". This option is exclusive with `state_files`.
+	//
+	// For more details about states and highstates, refer to the [Salt documentation](https://docs.saltproject.io/en/latest/topics/tutorials/starting_states.html).
 	StateTree string `mapstructure:"state_tree"`
 
 	// Directory where files will be uploaded to on the target system.
-	// NOTE: Deprecated. Use StateDir instead.
+	// NOTE: Deprecated. Use state_directory instead.
 	StagingDir string `mapstructure:"staging_directory"`
 
-	// Directory where files will be uploaded to on the target system.
+	// The directory where state files will be uploaded to on the target system. Packer requires write
+	// permissions in this directory. Default values are used if this option is not set.
+	// The default value used will depend on the value of `target_os`. The default for Linux systems is:
+	//
+	// ```
+	// /tmp/packer-provisioner-salt
+	// ```
+	//
+	// For Windows systems the default is:
+	//
+	// ```
+	// C:/Windows/Temp/packer-provisioner-salt
+	// ```
+	//
+	// Windows paths are recommended to be set using `/` as the delimiter owing to more conventional
+	// characters causing issues when this plugin is executed on a Linux system.
 	StateDir string `mapstructure:"state_directory"`
 
-	// Path to Salt Pillar data tree to be copied to the remote machine.
+	// The individual pillar files to be used by Salt. These files must exist on
+	// the local system where Packer is executing. Individual pillar files must be referenced
+	// directly by state files unless a 'top.sls' file is included. This option is exclusive
+	// with `pillar_tree`.
+	PillarFiles []string `mapstructure:"pillar_files"`
+
+	// A path to the complete Salt pillar tree on your local system to be copied to the remote machine as the
+	// `pillar_directory`. The structure of the pillar tree is flexible, however the use of this option assumes
+	// that a `top.sls` file is present at the top of the pillar tree. The plugin assumes that Salt will evaluate
+	// the `top.sls` file and match expressions to determine which individual pillars should be applied.
+	// This option is exclusive with `pillar_files`.
+	//
+	// For more details about pillars, refer to the [Salt documentation](https://docs.saltproject.io/salt/user-guide/en/latest/topics/pillar.html).
 	PillarTree string `mapstructure:"pillar_tree"`
 
-	// Directory where pillar data files will be uploaded to on the target system.
+	// The directory where pillar files will be uploaded to on the target system. Packer requires write
+	// permissions in this directory. Default values are used if this option is not set.
+	// The default value used will depend on the value of `target_os`. The default for Linux systems is:
+	//
+	// ```
+	// /tmp/packer-provisioner-salt-pillar
+	// ```
+	//
+	// For Windows systems the default is:
+	//
+	// ```
+	// C:/Windows/Temp/packer-provisioner-salt-pillar
+	// ```
+	//
+	// Windows paths are recommended to be set using `/` as the delimiter owing to more conventional
+	// characters causing issues when this plugin is executed on a Linux system.
 	PillarDir string `mapstructure:"pillar_directory"`
 
-	// If true, remove uploaded contents after applying states. Defaults to false.
+	// If set to `true`, the contents uploaded to the target system will be removed after
+	// applying Salt states. By default this is set to `false`.
 	Clean bool `mapstructure:"clean"`
 
-	// Environment variables to be set for the Salt process.
+	// A collection of environment variables that will be made available to the Salt process
+	// when it is executed. The intended purpose of this facility is to enable secrets or
+	// environment-specific information to be consumed when applying Salt states.
+	//
+	// For example:
+	//
+	// ```hcl
+	// environment_vars = [ "SECRET_VALUE=${ var.build_secret }",
+	//                      "CONFIG_VALUE=${ var.config_value }" ]
+	// ```
+	// This would expose the environment variables `SECRET_VALUE` and `CONFIG_VALUE` to the Salt process.
+	// These environment variables can then be consumed within Salt states, for example:
+	//
+	// ```text
+	// {% set secret_value = salt['environ.get']('SECRET_VALUE', 'default_value') %}
+	// {% set config_value = salt['environ.get']('CONFIG_VALUE', 'default_value') %}
+	// # Echo config value
+	// echo config value:
+	// cmd.run:
+	//  - name: echo {{ config_value }}
+	// ```
 	EnvVars []string `mapstructure:"environment_vars"`
 
 	// Format string for environment variables. Default: "VARNAME='VARVALUE' ".
+	// NOTE: Deprecated.
 	EnvVarFormat string `mapstructure:"env_var_format"`
 }
 
 type Provisioner struct {
 	config        Config
 	stateFiles    []string
+	pillarFiles   []string
 	generatedData map[string]interface{}
 }
 
@@ -104,8 +184,13 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		return err
 	}
 
+	var errs *packersdk.MultiError
+
+	// Set default values
 	if p.config.TargetOS == "" {
 		p.config.TargetOS = "linux"
+	} else {
+		p.config.TargetOS = strings.ToLower(p.config.TargetOS)
 	}
 	if p.config.EnvVars == nil {
 		p.config.EnvVars = []string{}
@@ -113,17 +198,44 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	if p.config.StateFiles == nil {
 		p.config.StateFiles = []string{}
 	}
+	if p.config.PillarFiles == nil {
+		p.config.PillarFiles = []string{}
+	}
+	if p.config.EnvVarFormat == "" {
+		p.config.EnvVarFormat = p.getConfig("configEnvFormat")
+	}
+	if p.config.StateDir == "" {
+		if p.config.StagingDir != "" {
+			p.config.StateDir = p.config.StagingDir
+		} else {
+			p.config.StateDir = p.getConfig("configStateDir")
+		}
+	}
+	if p.config.PillarDir == "" {
+		p.config.PillarDir = p.getConfig("configPillarDir")
+	}
 
-	p.stateFiles = make([]string, 0, len(p.config.StateFiles))
-	var errs *packersdk.MultiError
-
+	// Validate exclusive options
 	if len(p.config.StateFiles) != 0 && p.config.StateTree != "" {
 		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("either state_files or state_tree can be specified, not both"))
 	}
 	if len(p.config.StateFiles) == 0 && p.config.StateTree == "" {
 		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("either state_files or state_tree must be specified"))
 	}
+	if len(p.config.PillarFiles) != 0 && p.config.PillarTree != "" {
+		errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("either pillar_files or pillar_tree can be specified, not both"))
+	}
 
+	// Validate any supplied environment variables
+	for _, kv := range p.config.EnvVars {
+		vs := strings.SplitN(kv, "=", 2)
+		if len(vs) != 2 || vs[0] == "" {
+			errs = packersdk.MultiErrorAppend(errs,
+				fmt.Errorf("environment variable not in format 'key=value': %s", kv))
+		}
+	}
+
+	// Validate supplied arrays of files
 	for _, f := range p.config.StateFiles {
 		if err := validateFileConfig(f, "state_files"); err != nil {
 			errs = packersdk.MultiErrorAppend(errs, err)
@@ -131,7 +243,15 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 			p.stateFiles = append(p.stateFiles, f)
 		}
 	}
+	for _, f := range p.config.PillarFiles {
+		if err := validateFileConfig(f, "pillar_files"); err != nil {
+			errs = packersdk.MultiErrorAppend(errs, err)
+		} else {
+			p.pillarFiles = append(p.pillarFiles, f)
+		}
+	}
 
+	// Vaildate supplied file trees
 	if p.config.StateTree != "" {
 		if err := validateDirConfig(p.config.StateTree, "state_tree"); err != nil {
 			errs = packersdk.MultiErrorAppend(errs, err)
@@ -157,6 +277,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 	p.generatedData = generatedData
 	ui.Say("Provisioning with Salt...")
 
+	// Upload state tree or create directory for state files
 	if p.config.StateTree != "" {
 		ui.Say("Uploading State Tree...")
 		if err := p.uploadDir(ui, comm, p.config.StateDir, p.config.StateTree); err != nil {
@@ -169,6 +290,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 		}
 	}
 
+	// Upload pillar tree
 	if p.config.PillarTree != "" {
 		ui.Say("Uploading Pillar Tree...")
 		if err := p.uploadDir(ui, comm, p.config.PillarDir, p.config.PillarTree); err != nil {
@@ -176,8 +298,24 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 		}
 	}
 
+	// Create directory for pillar files
+	if len(p.pillarFiles) > 0 {
+		ui.Say("Creating Salt pillar directory...")
+		if err := p.createDir(ui, comm, p.config.PillarDir); err != nil {
+			return fmt.Errorf("error creating pillar directory: %s", err)
+		}
+	}
+
+	// Upload state files
 	if len(p.stateFiles) > 0 {
-		if err := p.uploadStateFiles(ui, comm); err != nil {
+		if err := p.uploadFiles(ui, comm, p.stateFiles, p.config.StateDir); err != nil {
+			return err
+		}
+	}
+
+	// Upload pillar files
+	if len(p.pillarFiles) > 0 {
+		if err := p.uploadFiles(ui, comm, p.pillarFiles, p.config.PillarDir); err != nil {
 			return err
 		}
 	}
@@ -198,21 +336,21 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 // ----------------------------------------------------------------------------
 // File and directory helper methods
 // ----------------------------------------------------------------------------
-func (p *Provisioner) uploadStateFiles(ui packersdk.Ui, comm packersdk.Communicator) error {
-	for _, f := range p.stateFiles {
-		if err := p.uploadStateFile(ui, comm, f); err != nil {
+func (p *Provisioner) uploadFiles(ui packersdk.Ui, comm packersdk.Communicator, sourceFiles []string, targetDir string) error {
+	for _, f := range sourceFiles {
+		if err := p.uploadSingleFile(ui, comm, f, targetDir); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Provisioner) uploadStateFile(ui packersdk.Ui, comm packersdk.Communicator, stateFile string) error {
-	localFile, _ := filepath.Abs(stateFile)
-	ui.Say(fmt.Sprintf("Uploading state file: %s", localFile))
+func (p *Provisioner) uploadSingleFile(ui packersdk.Ui, comm packersdk.Communicator, uploadFile string, uploadDir string) error {
+	localFile, _ := filepath.Abs(uploadFile)
+	ui.Say(fmt.Sprintf("Uploading file %s to %s", localFile, uploadDir))
 
-	remoteDir := filepath.ToSlash(filepath.Join(p.config.StateDir, filepath.Dir(stateFile)))
-	remoteFile := filepath.ToSlash(filepath.Join(p.config.StateDir, stateFile))
+	remoteDir := filepath.ToSlash(filepath.Join(uploadDir, filepath.Dir(uploadFile)))
+	remoteFile := filepath.ToSlash(filepath.Join(uploadDir, uploadFile))
 
 	if err := p.createDir(ui, comm, remoteDir); err != nil {
 		return err
@@ -231,6 +369,7 @@ func (p *Provisioner) uploadDir(ui packersdk.Ui, comm packersdk.Communicator, ds
 	if src[len(src)-1] != '/' {
 		src += "/"
 	}
+	ui.Say(fmt.Sprintf("Uploading local directory %s to remote directory %s", src, dst))
 	return comm.UploadDir(dst, src, nil)
 }
 

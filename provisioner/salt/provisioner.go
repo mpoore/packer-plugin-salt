@@ -19,6 +19,7 @@ import (
 	packersdk "github.com/hashicorp/packer-plugin-sdk/packer"
 	"github.com/hashicorp/packer-plugin-sdk/template/config"
 	"github.com/hashicorp/packer-plugin-sdk/template/interpolate"
+	"github.com/mpoore/packer-plugin-salt/version"
 )
 
 var saltConfigMap = map[string]string{
@@ -27,14 +28,14 @@ var saltConfigMap = map[string]string{
 	"configPillarDir_linux":   "/tmp/packer-provisioner-salt-pillar",
 	"configPillarDir_windows": "C:/Windows/Temp/packer-provisioner-salt-pillar",
 	"configEnvFormat_linux":   "%s='%s' ",
-	"configEnvFormat_windows": "%s='%s' ",
+	"configEnvFormat_windows": "set \"%s=%s\" & ",
 }
 
 var saltCommandMap = map[string]string{
 	"cmdCreateDir_linux":        "mkdir -p '%s'",
-	"cmdCreateDir_windows":      "PowerShell -ExecutionPolicy Bypass -OutputFormat Text -Command {New-Item -ItemType Directory -Path %s -Force}",
+	"cmdCreateDir_windows":      "powershell.exe -ExecutionPolicy Bypass -OutputFormat Text -Command {New-Item -ItemType Directory -Path %s -Force}",
 	"cmdDeleteDir_linux":        "rm -rf '%s'",
-	"cmdDeleteDir_windows":      "PowerShell -ExecutionPolicy Bypass -OutputFormat Text -Command {Remove-Item -Recurse -Force %s}",
+	"cmdDeleteDir_windows":      "powershell.exe -ExecutionPolicy Bypass -OutputFormat Text -Command {Remove-Item -Recurse -Force %s}",
 	"cmdSaltCall_linux":         "sudo %ssalt-call --local --file-root=%s state.apply %s",
 	"cmdSaltCall_windows":       "%ssalt-call --local --file-root=%s state.apply %s",
 	"cmdSaltCallPillar_linux":   "sudo %ssalt-call --local --file-root=%s --pillar-root=%s state.apply %s",
@@ -275,6 +276,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 // ----------------------------------------------------------------------------
 func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packersdk.Communicator, generatedData map[string]interface{}) error {
 	p.generatedData = generatedData
+	ui.Say(fmt.Sprintf("Salt provisioner plugin version: %s", version.PluginVersion))
 	ui.Say("Provisioning with Salt...")
 
 	// Upload state tree or create directory for state files
@@ -374,7 +376,7 @@ func (p *Provisioner) uploadDir(ui packersdk.Ui, comm packersdk.Communicator, ds
 }
 
 func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, dir string) error {
-	cmd := &packersdk.RemoteCmd{Command: fmt.Sprintf("mkdir -p '%s'", dir)}
+	cmd := &packersdk.RemoteCmd{Command: fmt.Sprintf(p.getCommand("cmdCreateDir"), dir)}
 	ui.Say(fmt.Sprintf("Creating directory: %s", dir))
 	if err := cmd.RunWithUi(context.TODO(), comm, ui); err != nil {
 		return err
@@ -386,7 +388,7 @@ func (p *Provisioner) createDir(ui packersdk.Ui, comm packersdk.Communicator, di
 }
 
 func (p *Provisioner) removeDir(ui packersdk.Ui, comm packersdk.Communicator, dir string) error {
-	cmd := &packersdk.RemoteCmd{Command: fmt.Sprintf("rm -rf '%s'", dir)}
+	cmd := &packersdk.RemoteCmd{Command: fmt.Sprintf(p.getCommand("cmdDeleteDir"), dir)}
 	ui.Say(fmt.Sprintf("Removing directory: %s", dir))
 	_ = cmd.RunWithUi(context.TODO(), comm, ui)
 	return nil

@@ -24,7 +24,7 @@ The example below is fully functional.
 packer {
   required_plugins {
     salt = {
-      version = ">= 0.5.0"
+      version = ">= 0.5.1"
       source  = "github.com/mpoore/salt"
     }
   }

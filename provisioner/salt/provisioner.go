@@ -7,12 +7,15 @@
 package salt
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/hcl/v2/hcldec"
 	"github.com/hashicorp/packer-plugin-sdk/common"
@@ -36,10 +39,10 @@ var saltCommandMap = map[string]string{
 	"cmdCreateDir_windows":      "powershell.exe -ExecutionPolicy Bypass -OutputFormat Text -Command {New-Item -ItemType Directory -Path %s -Force}",
 	"cmdDeleteDir_linux":        "rm -rf '%s'",
 	"cmdDeleteDir_windows":      "powershell.exe -ExecutionPolicy Bypass -OutputFormat Text -Command {Remove-Item -Recurse -Force %s}",
-	"cmdSaltCall_linux":         "sudo %ssalt-call --local --file-root=%s state.apply %s",
-	"cmdSaltCall_windows":       "%ssalt-call --local --file-root=%s state.apply %s",
-	"cmdSaltCallPillar_linux":   "sudo %ssalt-call --local --file-root=%s --pillar-root=%s state.apply %s",
-	"cmdSaltCallPillar_windows": "%ssalt-call --local --file-root=%s --pillar-root=%s state.apply %s",
+	"cmdSaltCall_linux":         "sudo %ssalt-call --local --log-level=%s --file-root=%s state.apply %s",
+	"cmdSaltCall_windows":       "%ssalt-call --local --log-level=%s --file-root=%s state.apply %s",
+	"cmdSaltCallPillar_linux":   "sudo %ssalt-call --local --log-level=%s --file-root=%s --pillar-root=%s state.apply %s",
+	"cmdSaltCallPillar_windows": "%ssalt-call --local --log-level=%s --file-root=%s --pillar-root=%s state.apply %s",
 }
 
 type Config struct {
@@ -57,6 +60,7 @@ type Config struct {
 	// `windows` - This denotes that the target runs a Windows operating system.
 	//
 	// Presently this option determines some of the defaults used by the provisioner.
+	// NOTE: Deprecated. A Linux OS is assumed by default, but the provisioner will try to detect a Windows OS using PowerShell.
 	TargetOS string `mapstructure:"target_os"`
 
 	// The individual state files to be applied by Salt. These files must exist on
@@ -159,6 +163,11 @@ type Config struct {
 	// Format string for environment variables. Default: "VARNAME='VARVALUE' ".
 	// NOTE: Deprecated.
 	EnvVarFormat string `mapstructure:"env_var_format"`
+
+	// The log level used by salt-call for console messages.
+	// The default for salt-call is 'warning', however this plugin uses the default of 'error'.
+	// Possible valid values for salt-call are: all, garbage, trace, debug, info, warning, error, quiet.
+	LogLevel string `mapstructure:"log_level"`
 }
 
 type Provisioner struct {
@@ -188,6 +197,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	var errs *packersdk.MultiError
 
 	// Set default values
+	// TODO: p.config.TargetOS to be deprecated
 	if p.config.TargetOS == "" {
 		p.config.TargetOS = "linux"
 	} else {
@@ -202,9 +212,11 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	if p.config.PillarFiles == nil {
 		p.config.PillarFiles = []string{}
 	}
+	// TODO: p.config.EnvVarFormat to be deprecated
 	if p.config.EnvVarFormat == "" {
 		p.config.EnvVarFormat = p.getConfig("configEnvFormat")
 	}
+	// TODO: p.config.StagingDir to be deprecated
 	if p.config.StateDir == "" {
 		if p.config.StagingDir != "" {
 			p.config.StateDir = p.config.StagingDir
@@ -264,6 +276,26 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		}
 	}
 
+	// Validate log level
+	allowedValues := map[string]bool{
+		"all":     true,
+		"garbage": true,
+		"trace":   true,
+		"debug":   true,
+		"info":    true,
+		"warning": true,
+		"error":   true,
+		"quiet":   true,
+	}
+
+	if p.config.LogLevel != "" {
+		if !allowedValues[p.config.LogLevel] {
+			errs = packersdk.MultiErrorAppend(errs, fmt.Errorf("permitted value for log_level is one of: all, garbage, trace, debug, info, warning, error, quiet"))
+		}
+	} else {
+		p.config.LogLevel = "error"
+	}
+
 	if errs != nil && len(errs.Errors) > 0 {
 		return errs
 	}
@@ -278,6 +310,9 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 	p.generatedData = generatedData
 	ui.Say(fmt.Sprintf("Salt provisioner plugin version: %s", version.PluginVersion))
 	ui.Say("Provisioning with Salt...")
+
+	// Detect guest OS
+	p.config.TargetOS = p.detectGuestOS(comm, ui)
 
 	// Upload state tree or create directory for state files
 	if p.config.StateTree != "" {
@@ -461,9 +496,9 @@ func (p *Provisioner) executeSaltState(ui packersdk.Ui, comm packersdk.Communica
 	// Select args based on whether PillarTree is present
 	var args []any
 	if len(p.config.PillarTree) > 0 {
-		args = []any{envVars, p.config.StateDir, p.config.PillarDir, stateName}
+		args = []any{envVars, p.config.LogLevel, p.config.StateDir, p.config.PillarDir, stateName}
 	} else {
-		args = []any{envVars, p.config.StateDir, stateName}
+		args = []any{envVars, p.config.LogLevel, p.config.StateDir, stateName}
 	}
 
 	command := fmt.Sprintf(rawCommand, args...)
@@ -530,4 +565,53 @@ func (p *Provisioner) escapeEnvVars() ([]string, map[string]string) {
 	sort.Strings(keys)
 
 	return keys, envVars
+}
+
+// ----------------------------------------------------------------------------
+// Guest OS helper methods
+// ----------------------------------------------------------------------------
+func (p *Provisioner) detectGuestOS(comm packersdk.Communicator, ui packersdk.Ui) string {
+	ctx := context.TODO()
+
+	ui.Say("Detecting guest OS type...")
+	command := "powershell -Command [System.Environment]::OSVersion.Platform"
+	cmd := &packersdk.RemoteCmd{Command: command}
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = io.Discard // discard noisy errors
+
+	// Start the command
+	if err := comm.Start(ctx, cmd); err != nil {
+		ui.Say("Could not start OS detection command, defaulting to 'linux'")
+		return "linux"
+	}
+
+	// Wait with timeout
+	done := make(chan int, 1)
+	go func() {
+		exitStatus := cmd.Wait() // returns int, not error
+		done <- exitStatus
+	}()
+
+	select {
+	case exitStatus := <-done:
+		if exitStatus != 0 {
+			ui.Say("OS detection command failed, defaulting to 'linux'")
+			return "linux"
+		}
+	case <-time.After(10 * time.Second): // configurable timeout
+		ui.Say("OS detection command timed out, defaulting to 'linux'")
+		return "linux"
+	}
+
+	// Examine captured output
+	result := strings.TrimSpace(out.String())
+	if result == "Win32NT" {
+		ui.Say("Detected 'windows' guest OS")
+		return "windows"
+	}
+
+	ui.Say("Defaulting to 'linux' guest OS")
+	return "linux"
 }

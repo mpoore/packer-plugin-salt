@@ -29,6 +29,7 @@ type FlatConfig struct {
 	Clean               *bool             `mapstructure:"clean" cty:"clean" hcl:"clean"`
 	EnvVars             []string          `mapstructure:"environment_vars" cty:"environment_vars" hcl:"environment_vars"`
 	EnvVarFormat        *string           `mapstructure:"env_var_format" cty:"env_var_format" hcl:"env_var_format"`
+	LogLevel            *string           `mapstructure:"log_level" cty:"log_level" hcl:"log_level"`
 }
 
 // FlatMapstructure returns a new FlatConfig.
@@ -62,6 +63,7 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"clean":                      &hcldec.AttrSpec{Name: "clean", Type: cty.Bool, Required: false},
 		"environment_vars":           &hcldec.AttrSpec{Name: "environment_vars", Type: cty.List(cty.String), Required: false},
 		"env_var_format":             &hcldec.AttrSpec{Name: "env_var_format", Type: cty.String, Required: false},
+		"log_level":                  &hcldec.AttrSpec{Name: "log_level", Type: cty.String, Required: false},
 	}
 	return s
 }

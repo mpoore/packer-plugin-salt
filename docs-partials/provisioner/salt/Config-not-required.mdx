@@ -9,6 +9,7 @@
   `windows` - This denotes that the target runs a Windows operating system.
   
   Presently this option determines some of the defaults used by the provisioner.
+  NOTE: Deprecated. A Linux OS is assumed by default, but the provisioner will try to detect a Windows OS using PowerShell.
 
 - `state_files` ([]string) - The individual state files to be applied by Salt. These files must exist on
   your local system where Packer is executing. State files are applied in the order
@@ -100,5 +101,9 @@
 
 - `env_var_format` (string) - Format string for environment variables. Default: "VARNAME='VARVALUE' ".
   NOTE: Deprecated.
+
+- `log_level` (string) - The log level used by salt-call for console messages.
+  The default for salt-call is 'warning', however this plugin uses the default of 'error'.
+  Possible valid values for salt-call are: all, garbage, trace, debug, info, warning, error, quiet.
 
 <!-- End of code generated from the comments of the Config struct in provisioner/salt/provisioner.go; -->

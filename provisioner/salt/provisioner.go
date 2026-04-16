@@ -171,10 +171,13 @@ type Config struct {
 }
 
 type Provisioner struct {
-	config        Config
-	stateFiles    []string
-	pillarFiles   []string
-	generatedData map[string]interface{}
+	config           Config
+	stateFiles       []string
+	pillarFiles      []string
+	generatedData    map[string]interface{}
+	userSetStateDir  bool
+	userSetPillarDir bool
+	userSetEnvFormat bool
 }
 
 // ----------------------------------------------------------------------------
@@ -215,17 +218,24 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	// TODO: p.config.EnvVarFormat to be deprecated
 	if p.config.EnvVarFormat == "" {
 		p.config.EnvVarFormat = p.getConfig("configEnvFormat")
+	} else {
+		p.userSetEnvFormat = true
 	}
 	// TODO: p.config.StagingDir to be deprecated
 	if p.config.StateDir == "" {
 		if p.config.StagingDir != "" {
 			p.config.StateDir = p.config.StagingDir
+			p.userSetStateDir = true
 		} else {
 			p.config.StateDir = p.getConfig("configStateDir")
 		}
+	} else {
+		p.userSetStateDir = true
 	}
 	if p.config.PillarDir == "" {
 		p.config.PillarDir = p.getConfig("configPillarDir")
+	} else {
+		p.userSetPillarDir = true
 	}
 
 	// Validate exclusive options
@@ -313,6 +323,19 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 
 	// Detect guest OS
 	p.config.TargetOS = p.detectGuestOS(comm, ui)
+
+	// Re-apply OS-dependent defaults now that the real OS is known.
+	// These were set during Prepare() using the linux fallback; if the user
+	// didn't explicitly configure them, recalculate for the detected OS.
+	if !p.userSetEnvFormat {
+		p.config.EnvVarFormat = p.getConfig("configEnvFormat")
+	}
+	if !p.userSetStateDir {
+		p.config.StateDir = p.getConfig("configStateDir")
+	}
+	if !p.userSetPillarDir {
+		p.config.PillarDir = p.getConfig("configPillarDir")
+	}
 
 	// Upload state tree or create directory for state files
 	if p.config.StateTree != "" {

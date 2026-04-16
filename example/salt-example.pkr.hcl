@@ -1,7 +1,7 @@
 packer {
   required_plugins {
     salt = {
-      version = ">= 0.1.2"
+      version = ">= 0.5.7"
       source  = "github.com/mpoore/salt"
     }
   }

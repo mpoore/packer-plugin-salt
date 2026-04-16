@@ -1,3 +1,7 @@
+## 0.5.7 (April 16th 2026)
+### BUGFIXES:
+* OS type detection was occurring after default values were set, affecting Windows builds
+
 ## 0.5.6 (December 18th, 2025)
 ### IMPROVEMENTS:
 * Added the optional setting of 'log_level', which is used to control console messages from salt-call.

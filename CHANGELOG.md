@@ -1,6 +1,11 @@
+## 0.6.0 (July 20th, 2026)
+### IMPROVEMENTS:
+* The plugin reads and logs the version of salt-call present.
+* OS type detection is now more robust and positively identifies both Windows and Linux.
+
 ## 0.5.7 (April 16th 2026)
 ### BUGFIXES:
-* OS type detection was occurring after default values were set, affecting Windows builds
+* OS type detection was occurring after default values were set, affecting Windows builds.
 
 ## 0.5.6 (December 18th, 2025)
 ### IMPROVEMENTS:

@@ -43,6 +43,8 @@ var saltCommandMap = map[string]string{
 	"cmdSaltCall_windows":       "%ssalt-call --local --log-level=%s --file-root=%s state.apply %s",
 	"cmdSaltCallPillar_linux":   "sudo %ssalt-call --local --log-level=%s --file-root=%s --pillar-root=%s state.apply %s",
 	"cmdSaltCallPillar_windows": "%ssalt-call --local --log-level=%s --file-root=%s --pillar-root=%s state.apply %s",
+	"cmdSaltVer_linux":          "sudo salt-call --version",
+	"cmdSaltVer_windows":        "salt-call --version",
 }
 
 type Config struct {
@@ -318,11 +320,20 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 // ----------------------------------------------------------------------------
 func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packersdk.Communicator, generatedData map[string]interface{}) error {
 	p.generatedData = generatedData
+	ui.Say(fmt.Sprintf("============================================"))
 	ui.Say(fmt.Sprintf("Salt provisioner plugin version: %s", version.PluginVersion))
-	ui.Say("Provisioning with Salt...")
 
 	// Detect guest OS
-	p.config.TargetOS = p.detectGuestOS(comm, ui)
+	detectedOS, err := p.detectGuestOS(comm, ui)
+	if err != nil {
+		return err
+	}
+	p.config.TargetOS = detectedOS
+
+	// Detect Salt version
+	var saltVer string = p.detectSaltVersion(comm, ui)
+	ui.Say(fmt.Sprintf("Salt version installed on guest: %s", saltVer))
+	ui.Say("Provisioning with Salt...")
 
 	// Re-apply OS-dependent defaults now that the real OS is known.
 	// These were set during Prepare() using the linux fallback; if the user
@@ -389,7 +400,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packersdk.Ui, comm packe
 		_ = p.removeDir(ui, comm, p.config.StateDir)
 		_ = p.removeDir(ui, comm, p.config.PillarDir)
 	}
-
+	ui.Say(fmt.Sprintf("============================================"))
 	return nil
 }
 
@@ -593,24 +604,21 @@ func (p *Provisioner) escapeEnvVars() ([]string, map[string]string) {
 // ----------------------------------------------------------------------------
 // Guest OS helper methods
 // ----------------------------------------------------------------------------
-func (p *Provisioner) detectGuestOS(comm packersdk.Communicator, ui packersdk.Ui) string {
+// runGuestProbe runs a remote command with a timeout and returns its trimmed
+// stdout. ok is false if the command couldn't be started, exited non-zero, or
+// timed out - any of which mean the probe gave no usable signal.
+func (p *Provisioner) runGuestProbe(comm packersdk.Communicator, command string) (result string, ok bool) {
 	ctx := context.TODO()
-
-	ui.Say("Detecting guest OS type...")
-	command := "powershell -Command [System.Environment]::OSVersion.Platform"
 	cmd := &packersdk.RemoteCmd{Command: command}
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = io.Discard // discard noisy errors
 
-	// Start the command
 	if err := comm.Start(ctx, cmd); err != nil {
-		ui.Say("Could not start OS detection command, defaulting to 'linux'")
-		return "linux"
+		return "", false
 	}
 
-	// Wait with timeout
 	done := make(chan int, 1)
 	go func() {
 		exitStatus := cmd.Wait() // returns int, not error
@@ -620,21 +628,52 @@ func (p *Provisioner) detectGuestOS(comm packersdk.Communicator, ui packersdk.Ui
 	select {
 	case exitStatus := <-done:
 		if exitStatus != 0 {
-			ui.Say("OS detection command failed, defaulting to 'linux'")
-			return "linux"
+			return "", false
 		}
 	case <-time.After(10 * time.Second): // configurable timeout
-		ui.Say("OS detection command timed out, defaulting to 'linux'")
-		return "linux"
+		return "", false
 	}
 
-	// Examine captured output
-	result := strings.TrimSpace(out.String())
-	if result == "Win32NT" {
-		ui.Say("Detected 'windows' guest OS")
-		return "windows"
+	return strings.TrimSpace(out.String()), true
+}
+
+// detectGuestOS positively probes for both Windows and Linux rather than
+// assuming Linux whenever the Windows probe fails - a failed/timed-out probe
+// is not evidence of anything, so guessing wrong here would silently corrupt
+// paths, env var format, and shell syntax for the rest of the run.
+func (p *Provisioner) detectGuestOS(comm packersdk.Communicator, ui packersdk.Ui) (string, error) {
+	if result, ok := p.runGuestProbe(comm, "powershell -Command [System.Environment]::OSVersion.Platform"); ok && result == "Win32NT" {
+		ui.Say("Salt provisioner guest OS type:  windows")
+		return "windows", nil
 	}
 
-	ui.Say("Defaulting to 'linux' guest OS")
-	return "linux"
+	if result, ok := p.runGuestProbe(comm, "uname -s"); ok && strings.EqualFold(result, "Linux") {
+		ui.Say("Salt provisioner guest OS type:  linux")
+		return "linux", nil
+	}
+
+	return "", fmt.Errorf("could not reliably detect guest OS type; set target_os explicitly")
+}
+
+// detectSaltVersion returns the installed Salt version and codename, e.g.
+// "3006.23 (Sulfur)", parsed from `salt-call --version` output of the form
+// "salt-call 3006.23 (Sulfur)". Failure here is non-fatal - it's used for
+// informational logging only, so we fall back to "unknown" and carry on.
+func (p *Provisioner) detectSaltVersion(comm packersdk.Communicator, ui packersdk.Ui) string {
+	command := p.getCommand("cmdSaltVer")
+
+	result, ok := p.runGuestProbe(comm, command)
+	if !ok {
+		ui.Say("Could not detect the installed Salt version, continuing anyway")
+		return "unknown"
+	}
+
+	// Drop the leading "salt-call" token, keep "<version> (<codename>)"
+	fields := strings.Fields(result)
+	if len(fields) < 2 {
+		ui.Say("Could not parse the installed Salt version, continuing anyway")
+		return "unknown"
+	}
+
+	return strings.Join(fields[1:], " ")
 }

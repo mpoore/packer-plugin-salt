@@ -1,3 +1,7 @@
+## 0.7.0 (September 15th, 2026)
+### IMPROVEMENTS:
+* Go version updated to 1.26.8
+
 ## 0.6.0 (July 20th, 2026)
 ### IMPROVEMENTS:
 * The plugin reads and logs the version of salt-call present.
